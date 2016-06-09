@@ -68,7 +68,6 @@ public class MMCDeployerBuilder extends Builder
 
 		listener.getLogger().println(">>> MMC URL IS " + mmcUrl);
 		listener.getLogger().println(">>> USER IS " + user);
-		listener.getLogger().println(">>> PASSWORD IS " + password);
 		listener.getLogger().println(">>> File URL IS " + fileLocation);
 		listener.getLogger().println(">>> ArtifactName IS " + artifactName);
 		listener.getLogger().println(">>> clusterOrServerGroupName IS " + clusterOrServerGroupName);
@@ -101,10 +100,10 @@ public class MMCDeployerBuilder extends Builder
 								listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " + nextAttached.artifactId);
 								listener.getLogger().println(">>>>>>>>>>>> VERSION: " + nextAttached.version);
 								listener.getLogger().println(">>>>>>>>>>>> FILE: " + nextAttached.getFile(mavenBuild).getAbsolutePath());
-								doDeploy(listener, 
-										muleRest, 
-										nextAttached.getFile(mavenBuild), 
-										hudson.Util.replaceMacro(clusterOrServerGroupName, envVars), 
+								doDeploy(listener,
+										muleRest,
+										nextAttached.getFile(mavenBuild),
+										hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
 										nextAttached.version,
 								        nextAttached.artifactId);
 								success = true;
@@ -124,11 +123,11 @@ public class MMCDeployerBuilder extends Builder
 						listener.getLogger().println(">>>>>>>>>>>> VERSION: " +hudson.Util.replaceMacro(artifactVersion, envVars));
 						listener.getLogger().println(">>>>>>>>>>>> FILE: "+ file.getRemote());
 						listener.getLogger().println(">>>>>>>>>>>> SERVER: " +hudson.Util.replaceMacro(clusterOrServerGroupName, envVars));
-						
-						doDeploy(listener, 
-								muleRest, 
-								new File(file.getRemote()), 
-								hudson.Util.replaceMacro(clusterOrServerGroupName, envVars), 
+
+						doDeploy(listener,
+								muleRest,
+								new File(file.getRemote()),
+								hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
 								hudson.Util.replaceMacro(artifactVersion, envVars),
 						        hudson.Util.replaceMacro(artifactName, envVars));
 						success = true;
