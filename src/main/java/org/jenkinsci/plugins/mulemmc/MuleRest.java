@@ -6,9 +6,7 @@ import java.io.InputStream;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URL;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -24,7 +22,6 @@ import org.apache.commons.httpclient.auth.AuthScope;
 import org.apache.commons.httpclient.methods.DeleteMethod;
 import org.apache.commons.httpclient.methods.GetMethod;
 import org.apache.commons.httpclient.methods.PostMethod;
-import org.apache.commons.httpclient.methods.PutMethod;
 import org.apache.commons.httpclient.methods.StringRequestEntity;
 import org.apache.commons.httpclient.methods.multipart.FilePart;
 import org.apache.commons.httpclient.methods.multipart.MultipartRequestEntity;
@@ -56,7 +53,7 @@ public class MuleRest
 		logger.fine("MMC URL: {}, Username: {}" + " " + mmcUrl + " " + username);
 
 	}
-
+	
 	private void processResponseCode(int code) throws Exception
 	{
 		logger.fine(">>>>processResponseCode " + code);
@@ -181,8 +178,30 @@ public class MuleRest
 		processResponseCode(statusCode);
 
 	}
+	
 
-	public String restfullyGetDeploymentIdByName(String name) throws Exception
+	public String restfullyWaitStartupForCompletion(String deploymentId) throws Exception {
+		logger.fine(">>>>restfullyWaitStartupForCompletion " + deploymentId);
+
+		HttpClient httpClient = configureHttpClient();
+
+		GetMethod get = new GetMethod(mmcUrl + "/deployments/" + deploymentId);
+		get.setDoAuthentication(true);
+
+		int statusCode = httpClient.executeMethod(get);
+		if (statusCode!=200)  
+			logger.fine(">>>>restfullyCreateDeployment error response "+get.getResponseBodyAsString());
+		
+		processResponseCode(statusCode);
+
+		InputStream responseStream = get.getResponseBodyAsStream();
+		JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
+		String status = jsonNode.path("status").asText();
+		logger.fine(">>>>restfullyCreateDeployment status "+ status);
+		return status;
+	}
+
+	public String restfullyGetDeploymentIdByName(String name) throws Exception 
 	{
 		logger.fine(">>>>restfullyGetDeploymentIdByName " + name);
 
@@ -484,4 +503,5 @@ public class MuleRest
 
 		return mmcHttpClient;
 	}
+
 }

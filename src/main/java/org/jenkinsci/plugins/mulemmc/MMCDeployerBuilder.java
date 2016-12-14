@@ -174,6 +174,13 @@ public class MMCDeployerBuilder extends Builder
 		}
 		if(completeDeployment){
 			muleRest.restfullyDeployDeploymentById(deploymentId);
+			String status;
+			do {
+				status = muleRest.restfullyWaitStartupForCompletion(deploymentId);
+				listener.getLogger().println("....retreiving status: " + status);
+				if (status.equals("FAILED"))
+					throw new Exception("Startup failed.");
+			} while (status.equals("IN PROGRESS"));
 		}
 		listener.getLogger().println("Deployment finished");
 	}
