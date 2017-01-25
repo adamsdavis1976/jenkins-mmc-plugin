@@ -28,6 +28,7 @@ import org.apache.commons.httpclient.UsernamePasswordCredentials;
 import org.apache.commons.httpclient.auth.AuthPolicy;
 import org.apache.commons.httpclient.auth.AuthScope;
 import org.apache.commons.httpclient.methods.GetMethod;
+import org.jsoup.helper.StringUtil;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
@@ -40,6 +41,7 @@ public class MMCDeployerBuilder extends Builder
 	public final String fileLocation;
 	public final String artifactVersion;
 	public final String artifactName;
+	public final String deploymentName;
 	public final boolean clusterDeploy;
 	public final boolean completeDeployment;
 	public final String clusterOrServerGroupName;
@@ -47,12 +49,13 @@ public class MMCDeployerBuilder extends Builder
 
 	@DataBoundConstructor
 	public MMCDeployerBuilder(String mmcUrl, String user, String password, boolean clusterDeploy, boolean completeDeployment, String clusterOrServerGroupName,
-	        String fileLocation, String artifactName, String artifactVersion) {
+	        String fileLocation, String artifactName, String deploymentName, String artifactVersion) {
 		this.mmcUrl = mmcUrl;
 		this.user = user;
 		this.password = password;
 		this.fileLocation = fileLocation;
 		this.artifactName = artifactName;
+		this.deploymentName = StringUtil.isBlank(deploymentName) ? artifactName : deploymentName;
 		this.artifactVersion = artifactVersion;
 		this.clusterOrServerGroupName = clusterOrServerGroupName;
 		this.clusterDeploy = clusterDeploy;
@@ -70,6 +73,7 @@ public class MMCDeployerBuilder extends Builder
 		listener.getLogger().println(">>> USER IS " + user);
 		listener.getLogger().println(">>> File URL IS " + fileLocation);
 		listener.getLogger().println(">>> ArtifactName IS " + artifactName);
+		listener.getLogger().println(">>> DeploymentName IS " + deploymentName);
 		listener.getLogger().println(">>> clusterOrServerGroupName IS " + clusterOrServerGroupName);
 		listener.getLogger().println(">>> Beginning deployment....");
 
@@ -82,63 +86,9 @@ public class MMCDeployerBuilder extends Builder
 
 			if (build instanceof MavenModuleSetBuild)
 			{
-				listener.getLogger().println("doing maven deloy based on maven artifact details in POM");
-				for (final List<MavenBuild> mavenBuilds : ((MavenModuleSetBuild) build).getModuleBuilds().values())
-				{
-					for (final MavenBuild mavenBuild : mavenBuilds)
-					{
-
-						MavenArtifactRecord record = mavenBuild.getMavenArtifacts();
-
-						MavenArtifact mainArtifact = record.mainArtifact;
-
-						if (record.isPOM())
-						{
-							List<MavenArtifact> attachedArtifacts = record.attachedArtifacts;
-							for (final MavenArtifact nextAttached : attachedArtifacts)
-							{
-								listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " + nextAttached.artifactId);
-								listener.getLogger().println(">>>>>>>>>>>> VERSION: " + nextAttached.version);
-								listener.getLogger().println(">>>>>>>>>>>> FILE: " + nextAttached.getFile(mavenBuild).getAbsolutePath());
-								doDeploy(listener,
-										muleRest,
-										nextAttached.getFile(mavenBuild),
-										hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
-										nextAttached.version,
-								        nextAttached.artifactId);
-								success = true;
-							}
-						}
-					}
-				}
-			} else
-			{
-				listener.getLogger().println("doing freestyle project deloy - using plugin configuration");
-				if (artifactVersion != null && artifactVersion.length()>0 && artifactName != null && artifactName.length()>0 )
-				{
-					//
-					for (FilePath file : build.getWorkspace().list(this.fileLocation))
-					{
-						listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " + hudson.Util.replaceMacro(artifactName, envVars));
-						listener.getLogger().println(">>>>>>>>>>>> VERSION: " +hudson.Util.replaceMacro(artifactVersion, envVars));
-						listener.getLogger().println(">>>>>>>>>>>> FILE: "+ file.getRemote());
-						listener.getLogger().println(">>>>>>>>>>>> SERVER: " +hudson.Util.replaceMacro(clusterOrServerGroupName, envVars));
-
-						doDeploy(listener,
-								muleRest,
-								new File(file.getRemote()),
-								hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
-								hudson.Util.replaceMacro(artifactVersion, envVars),
-						        hudson.Util.replaceMacro(artifactName, envVars));
-						success = true;
-					}
-				}
-				else
-				{
-					listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " +artifactName);
-					listener.getLogger().println(">>>>>>>>>>>> VERSION: " +artifactVersion);
-					throw new Exception("Plugin configuration for Artifact id/version required for Freestyle project. ");
-				}
+                success = deployMavenBuild((MavenModuleSetBuild) build, listener, success, envVars, muleRest);
+			} else {
+                success = deployFreestyleProject(build, listener, success, envVars, muleRest);
 			}
 
 		} catch (IOException e)
@@ -156,23 +106,92 @@ public class MMCDeployerBuilder extends Builder
 		return success;
 	}
 
-	private void doDeploy(BuildListener listener, MuleRest muleRest, File aFile, String clusterOrServerGroupName, String theVersion, String theName) throws Exception
+    private boolean deployFreestyleProject(AbstractBuild<?, ?> build, BuildListener listener, boolean success, EnvVars envVars, MuleRest muleRest) throws Exception {
+        listener.getLogger().println("doing freestyle project deploy - using plugin configuration");
+        if (artifactVersion != null && artifactVersion.length()>0 && artifactName != null && artifactName.length()>0 )
+        {
+            final FilePath[] deploymentArtifacts = build.getWorkspace().list(this.fileLocation);
+            if (deploymentArtifacts.length == 0) {
+                throw new Exception("No artifacts found for deployment");
+            }
+            for (FilePath file : deploymentArtifacts)
+            {
+                listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " + hudson.Util.replaceMacro(artifactName, envVars));
+                listener.getLogger().println(">>>>>>>>>>>> VERSION: " +hudson.Util.replaceMacro(artifactVersion, envVars));
+                listener.getLogger().println(">>>>>>>>>>>> FILE: "+ file.getRemote());
+                listener.getLogger().println(">>>>>>>>>>>> SERVER: " +hudson.Util.replaceMacro(clusterOrServerGroupName, envVars));
+                listener.getLogger().println(">>>>>>>>>>>> DEPLOYMENT: " +hudson.Util.replaceMacro(deploymentName, envVars));
+
+                doDeploy(listener,
+                        muleRest,
+                        new File(file.getRemote()),
+                        hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
+                        hudson.Util.replaceMacro(artifactVersion, envVars),
+                        hudson.Util.replaceMacro(artifactName, envVars),
+                        hudson.Util.replaceMacro(deploymentName, envVars));
+
+                success = true;
+            }
+        }
+        else
+        {
+            listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " +artifactName);
+            listener.getLogger().println(">>>>>>>>>>>> VERSION: " +artifactVersion);
+            throw new Exception("Plugin configuration for Artifact id/version required for Freestyle project. ");
+        }
+        return success;
+    }
+
+    private boolean deployMavenBuild(MavenModuleSetBuild build, BuildListener listener, boolean success, EnvVars envVars, MuleRest muleRest) throws Exception {
+        listener.getLogger().println("doing maven deploy based on maven artifact details in POM");
+        for (final List<MavenBuild> mavenBuilds : build.getModuleBuilds().values())
+        {
+            for (final MavenBuild mavenBuild : mavenBuilds)
+            {
+
+                MavenArtifactRecord record = mavenBuild.getMavenArtifacts();
+
+                MavenArtifact mainArtifact = record.mainArtifact;
+
+                if (record.isPOM())
+                {
+                    List<MavenArtifact> attachedArtifacts = record.attachedArtifacts;
+                    for (final MavenArtifact nextAttached : attachedArtifacts)
+                    {
+                        listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " + nextAttached.artifactId);
+                        listener.getLogger().println(">>>>>>>>>>>> VERSION: " + nextAttached.version);
+                        listener.getLogger().println(">>>>>>>>>>>> FILE: " + nextAttached.getFile(mavenBuild).getAbsolutePath());
+                        doDeploy(listener,
+                                muleRest,
+                                nextAttached.getFile(mavenBuild),
+                                hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
+                                nextAttached.version,
+                                nextAttached.artifactId,
+                                deploymentName);
+                        success = true;
+                    }
+                }
+            }
+        }
+        return success;
+    }
+
+    private void doDeploy(BuildListener listener, MuleRest muleRest, File aFile, String clusterOrServerGroupName, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
 	{
 		listener.getLogger().println("Deployment starting...");
-		String versionId = muleRest.restfullyUploadRepository(theName, theVersion, aFile);
+		String versionId = muleRest.restfullyUploadRepository(theApplicationName, theVersion, aFile);
 		String deploymentId = null;
 		if (clusterOrServerGroupName != null && clusterDeploy)
 		{
 			listener.getLogger().println("....doing cluster deploy");
-			deploymentId = muleRest.restfullyCreateClusterDeployment(clusterOrServerGroupName, theName, versionId);
+			deploymentId = muleRest.restfullyCreateClusterDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId);
 
 		} else
 		{
 			listener.getLogger().println("....doing serverGroup deploy");
-			deploymentId = muleRest.restfullyCreateDeployment(clusterOrServerGroupName, theName, versionId);
-
+			deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId);
 		}
-		if(completeDeployment){
+		if (completeDeployment){
 			muleRest.restfullyDeployDeploymentById(deploymentId);
 			String status;
 			do {
