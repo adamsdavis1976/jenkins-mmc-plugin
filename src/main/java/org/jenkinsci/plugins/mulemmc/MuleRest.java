@@ -184,7 +184,7 @@ public class MuleRest
         logger.fine(">>>> restfullyGetDeployments " + versionIds + " " + serverGroupId);
 
         HttpClient httpClient = configureHttpClient();
-        GetMethod get = new GetMethod(mmcUrl + "/deployments?servers=" + serverGroupId);
+        GetMethod get = new GetMethod(mmcUrl + "/deployments?server=" + serverGroupId);
 
         int statusCode = httpClient.executeMethod(get);
 
@@ -199,8 +199,11 @@ public class MuleRest
         HashSet<String> deploymentIds = new HashSet<>();
         for (JsonNode deploymentNode : deploymentsNode) {
             if (!"DEPLOYED".equals(deploymentNode.path("status").asText())) {
-                logger.fine(">>>> restfullyGetDeployment ignoring " + deploymentNode.asText());
+                logger.fine(">>>> restfullyGetDeployment ignoring " + deploymentNode.asText() + " because status is " + deploymentNode.path("status").asText());
                 continue;
+            }
+            if () {
+
             }
 
             ArrayNode deployedVersionIds = (ArrayNode) deploymentNode.path("applications");
