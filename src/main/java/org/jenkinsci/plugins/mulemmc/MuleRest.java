@@ -33,7 +33,7 @@ public class MuleRest
 	private URL mmcUrl;
 	private String username;
 	private String password;
-    public static final JsonFactory JSON_FACTORY = new JsonFactory();
+    private static final JsonFactory JSON_FACTORY = new JsonFactory();
 
     public MuleRest(URL mmcUrl, String username, String password) {
 		this.mmcUrl = mmcUrl;
@@ -68,20 +68,24 @@ public class MuleRest
      * @param applicationName name of the application to deploy
      * @param versionId id of the version-application to deploy
      * @return id of the generated deployment
-     * @throws Exception
      */
 	public String restfullyCreateDeployment(String deploymentName, String targetName, String applicationName, String versionId) throws Exception
 	{
 		logger.fine(">>>> restfullyCreateDeployment " + deploymentName + " " + targetName + " " + versionId);
 
-        String serverGroupId = restfullyGetServerGroupId(targetName);
-        //		Set<String> serverIds = restfullyGetServersOfServerGroup(targetName);
-        //      String clusterId = restfullyGetClusterId(targetName);
-		//      if (serverIds.isEmpty()) { throw new IllegalArgumentException("No server found in group : " + targetName); }
+        // server and serverGroups are handled the same
+        String serverId = restfullyGetServerGroupId(targetName);
+        if (serverId == null) {
+            serverId = restfullyGetServerId(targetName);
+        }
+        String clusterId = restfullyGetClusterId(targetName);
+        if (serverId == null && clusterId == null)
+            throw new IllegalArgumentException("no server, server group or cluster found having the name " + targetName);
 
 		// delete existing deployment before creating new one
 		restfullyDeleteDeployment(deploymentName);
-        restfullyUndeploy(applicationName, targetName);
+        // undeploy other versions of that application on that target
+        undeploy(applicationName, targetName);
 
 		HttpClient httpClient = configureHttpClient();
 
@@ -91,7 +95,11 @@ public class MuleRest
 
         writeName(deploymentName, jGenerator);
 
-        writeServers(serverGroupId, jGenerator);
+        if (serverId != null)
+            writeServers(serverId, jGenerator);
+        if (clusterId != null)
+            writeClusters(clusterId, jGenerator);
+
         writeApplications(versionId, jGenerator);
 
 		jGenerator.writeEndObject(); // }
@@ -150,10 +158,15 @@ public class MuleRest
         jGenerator.writeStringField("name", deploymentName); // "name" : name
     }
 
-    private void restfullyUndeploy(String applicationName, String serverGroup) throws Exception {
-        logger.fine(">>>> restfullyUndeploy " + applicationName + " from " + serverGroup);
+    /**
+     * Undeploy an application on a targert
+     * @param applicationName name of the application
+     * @param targetName name of the target, either a server, a server group or a cluster
+     */
+    private void undeploy(String applicationName, String targetName) throws Exception {
+        logger.fine(">>>> undeploy " + applicationName + " from " + targetName);
 
-        Set<String> deploymentIds = findDeployments(applicationName, serverGroup);
+        Set<String> deploymentIds = getDeployments(applicationName, targetName);
 
         for (String deploymentId : deploymentIds) {
             restfullyUndeployById(deploymentId);
@@ -170,21 +183,42 @@ public class MuleRest
         processResponseCode(statusCode);
     }
 
-    private Set<String> findDeployments(String applicationName, String serverGroup) throws Exception {
+    private Set<String> getDeployments(String applicationName, String targetName) throws Exception {
 
         final String applicationId = restfullyGetApplicationId(applicationName);
         final HashSet<String> versionIds = restfullyGetVersionIds(applicationId);
-        final String serverGroupId = restfullyGetServerGroupId(serverGroup);
 
-        return restfullyGetDeployments(versionIds, serverGroupId);
+        Set<String> deploymentIds = new HashSet<>();
+
+        final String serverId = restfullyGetServerId(targetName);
+        if (serverId != null)
+            deploymentIds.addAll(restfullyGetDeployments(versionIds, serverId, SERVER_TYPE.SERVER));
+
+        final String serverGroupId = restfullyGetServerGroupId(targetName);
+        if (serverGroupId != null)
+            deploymentIds.addAll(restfullyGetDeployments(versionIds, serverGroupId, SERVER_TYPE.GROUP));
+
+        final String clusterId = restfullyGetClusterId(targetName);
+        if (clusterId != null)
+            deploymentIds.addAll(restfullyGetDeployments(versionIds, clusterId, SERVER_TYPE.CLUSTER));
+
+        return deploymentIds;
     }
 
-    private Set<String> restfullyGetDeployments(HashSet<String> versionIds, String serverGroupId) throws Exception {
+    private enum SERVER_TYPE {
+        SERVER("server"),
+        GROUP("server"),
+        CLUSTER("cluster");
 
-        logger.fine(">>>> restfullyGetDeployments " + versionIds + " " + serverGroupId);
+        SERVER_TYPE(String queryString) {
+            this.queryString = queryString;
+        }
+        String queryString;
+    }
 
+    private Set<String> restfullyGetDeployments(HashSet<String> versionIds, String targetId, SERVER_TYPE serverType) throws Exception {
         HttpClient httpClient = configureHttpClient();
-        GetMethod get = new GetMethod(mmcUrl + "/deployments?server=" + serverGroupId);
+        GetMethod get = new GetMethod(mmcUrl + "/deployments?" + serverType.queryString + "=" + targetId);
 
         int statusCode = httpClient.executeMethod(get);
 
@@ -201,9 +235,6 @@ public class MuleRest
             if (!"DEPLOYED".equals(deploymentNode.path("status").asText())) {
                 logger.fine(">>>> restfullyGetDeployment ignoring " + deploymentNode.asText() + " because status is " + deploymentNode.path("status").asText());
                 continue;
-            }
-            if () {
-
             }
 
             ArrayNode deployedVersionIds = (ArrayNode) deploymentNode.path("applications");
@@ -224,7 +255,6 @@ public class MuleRest
      *
      * @param applicationId id of the application
      * @return a set of version-ids known to the MMC
-     * @throws Exception
      */
     private HashSet<String> restfullyGetVersionIds(String applicationId) throws Exception {
         logger.fine(">>>> restfullyGetVersionIds " + applicationId);
@@ -286,7 +316,6 @@ public class MuleRest
 		processResponseCode(statusCode);
 
 	}
-	
 
 	public String restfullyWaitStartupForCompletion(String deploymentId) throws Exception {
 		logger.fine(">>>>restfullyWaitStartupForCompletion " + deploymentId);
@@ -391,22 +420,45 @@ public class MuleRest
         return null;
     }
 
+    private String restfullyGetServerId(String name) throws Exception {
+        logger.fine(">>>>restfullyGetServerId " + name);
+
+        HttpClient httpClient = configureHttpClient();
+
+        GetMethod get = new GetMethod(mmcUrl + "/servers?name=" + name);
+
+        int statusCode = httpClient.executeMethod(get);
+
+        processResponseCode(statusCode);
+
+        InputStream responseStream = get.getResponseBodyAsStream();
+        JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
+        JsonNode serversNode = jsonNode.path("data");
+        for (JsonNode serverNode : serversNode)
+        {
+            if (name.equals(serverNode.path("name").asText()))
+            {
+                return serverNode.path("id").asText();
+            }
+        }
+        logger.fine(">>>>restfullyGetServerId - no matching Server retreived from MMC");
+
+        return null;
+    }
+
     /** Get the id of a serverGroup
      *
      * @param name name of the group to look up
      * @return id of the group or null if no such group exists
-     * @throws Exception
      */
-    private String restfullyCheckServerGroupId(String name) throws Exception {
-        logger.fine(">>>>restfullyCheckServerGroupId " + name);
+    private String restfullyGetServerGroupId(String name) throws Exception {
+        logger.fine(">>>>restfullyGetServerGroupId " + name);
 
         HttpClient httpClient = configureHttpClient();
 
         GetMethod get = new GetMethod(mmcUrl + "/serverGroups");
 
         int statusCode = httpClient.executeMethod(get);
-
-        String serverGroupId = null;
 
         processResponseCode(statusCode);
 
@@ -417,56 +469,14 @@ public class MuleRest
         {
             if (name.equals(groupNode.path("name").asText()))
             {
-                serverGroupId = groupNode.path("id").asText();
+                return groupNode.path("id").asText();
             }
         }
-        return serverGroupId;
+        logger.fine(">>>>restfullyGetServerGroupId - no matching ServerGroup retreived from MMC");
+
+        return null;
     }
 
-    private String restfullyGetServerGroupId(String serverGroup) throws Exception
-	{
-		logger.fine(">>>>restfullyGetServerGroupId " + serverGroup);
-
-		String serverGroupId = restfullyCheckServerGroupId(serverGroup);
-		if (serverGroupId == null) {
-            throw new IllegalArgumentException("no server group found having the name " + serverGroup);
-		}
-
-		return serverGroupId;
-	}
-
-	private Set<String> restfullyGetServersOfServerGroup(String serverGroup) throws Exception
-	{
-		logger.fine(">>>>restfullyGetServersOfServerGroup " + serverGroup);
-
-		HttpClient httpClient = configureHttpClient();
-
-		GetMethod get = new GetMethod(mmcUrl + "/servers");
-
-		int statusCode = httpClient.executeMethod(get);
-
-		Set<String> serversId = new TreeSet<>();
-		processResponseCode(statusCode);
-
-		InputStream responseStream = get.getResponseBodyAsStream();
-		JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
-		JsonNode serversNode = jsonNode.path("data");
-		for (JsonNode serverNode : serversNode)
-		{
-			String serverId = serverNode.path("id").asText();
-
-			JsonNode groupsNode = serverNode.path("groups");
-			for (JsonNode groupNode : groupsNode)
-			{
-				if (serverGroup.equals(groupNode.path("name").asText()))
-				{
-					serversId.add(serverId);
-				}
-			}
-		}
-
-		return serversId;
-	}
 
 	public String restfullyUploadRepository(String name, String version, File packageFile) throws Exception
 	{
@@ -542,59 +552,6 @@ public class MuleRest
 		return version.contains(SNAPSHOT);
 	}
 
-	/**
-	 * @param deploymentName name of the deployment
-	 * @param clusterName name of cluster to deploy to
-	 * @param applicationName name of the application to deploy to cluster
-     * @param versionId versioned application id to deploy  @return the id of the created deployment
-	 */
-	public String restfullyCreateClusterDeployment(String deploymentName, String clusterName, String applicationName, String versionId) throws Exception
-	{
-        logger.fine(">>>>restfullyCreateClusterDeployment  "+clusterName +" "+ deploymentName + " " + versionId);
-			
-	    String clusterId = restfullyGetClusterId(clusterName);
-		if (clusterId.isEmpty()) { 
-			throw new IllegalArgumentException("Cluster not found : " + clusterName); 
-		}
-
-		restfullyDeleteDeployment(deploymentName);
-		
-		return restfullyCreateClusterDeploymentById(deploymentName, versionId, clusterId);
-	}
-
-	private String restfullyCreateClusterDeploymentById(String name, String versionId, String clusterId) throws Exception
-    {
-	    logger.fine(">>>>restfullyCreateClusterDeploymentById  " + name + " " + versionId);
-
-		HttpClient httpClient = configureHttpClient();
-
-		StringWriter stringWriter = new StringWriter();
-		JsonGenerator jGenerator = JSON_FACTORY.createGenerator(stringWriter);
-		jGenerator.writeStartObject(); // {
-
-        writeName(name, jGenerator);
-        writeClusters(clusterId, jGenerator);
-        writeApplications(versionId, jGenerator);
-
-        jGenerator.writeEndObject(); // }
-		jGenerator.close();
-
-		PostMethod post = new PostMethod(mmcUrl + "/deployments");
-		post.setDoAuthentication(true);
-		post.setRequestEntity(new StringRequestEntity(stringWriter.toString(), "application/json", null));
-
-		logger.fine(">>>>restfullyCreateClusterDeploymentById request " + stringWriter.toString());
-
-		int statusCode = httpClient.executeMethod(post);
-
-		processResponseCode(statusCode);
-
-		InputStream responseStream = post.getResponseBodyAsStream();
-
-		JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
-		return jsonNode.path("id").asText();
-    }
-
     private void writeApplications(String versionId, JsonGenerator jGenerator) throws IOException {
         jGenerator.writeFieldName("applications"); // "applications" :
         jGenerator.writeStartArray(); // [
@@ -604,7 +561,6 @@ public class MuleRest
 
     public String restfullyGetClusterId(String clusterName) throws Exception
 	{
-
 		logger.fine(">>>>restfullyGetClusterId " + clusterName);
 
 		HttpClient httpClient = configureHttpClient();
