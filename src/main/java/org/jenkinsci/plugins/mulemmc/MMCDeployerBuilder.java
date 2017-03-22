@@ -42,14 +42,14 @@ public class MMCDeployerBuilder extends Builder
 	public final String artifactVersion;
 	public final String artifactName;
 	public final String deploymentName;
-	public final boolean clusterDeploy;
 	public final boolean completeDeployment;
 	public final String clusterOrServerGroupName;
 	public final boolean deployWithPomDetails;
+	public final String startupTimeout;
 
 	@DataBoundConstructor
-	public MMCDeployerBuilder(String mmcUrl, String user, String password, boolean clusterDeploy, boolean completeDeployment, String clusterOrServerGroupName,
-	        String fileLocation, String artifactName, String deploymentName, String artifactVersion) {
+	public MMCDeployerBuilder(String mmcUrl, String user, String password, boolean completeDeployment, String clusterOrServerGroupName,
+	        String fileLocation, String artifactName, String deploymentName, String artifactVersion, String startupTimeout) {
 		this.mmcUrl = mmcUrl;
 		this.user = user;
 		this.password = password;
@@ -58,9 +58,9 @@ public class MMCDeployerBuilder extends Builder
 		this.deploymentName = StringUtil.isBlank(deploymentName) ? artifactName : deploymentName;
 		this.artifactVersion = artifactVersion;
 		this.clusterOrServerGroupName = clusterOrServerGroupName;
-		this.clusterDeploy = clusterDeploy;
 		this.completeDeployment = completeDeployment;
 		this.deployWithPomDetails = true;
+		this.startupTimeout = startupTimeout;
 	}
 
 	@Override
@@ -176,22 +176,14 @@ public class MMCDeployerBuilder extends Builder
         return success;
     }
 
-    private void doDeploy(BuildListener listener, MuleRest muleRest, File aFile, String clusterOrServerGroupName, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
+    protected void doDeploy(BuildListener listener, MuleRest muleRest, File aFile, String clusterOrServerGroupName, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
 	{
-		listener.getLogger().println("Deployment starting...");
+		listener.getLogger().println("Deployment starting (" + theApplicationName + " " + theVersion + " to " + clusterOrServerGroupName + ")...");
 		String versionId = muleRest.restfullyUploadRepository(theApplicationName, theVersion, aFile);
-		String deploymentId = null;
-		if (clusterOrServerGroupName != null && clusterDeploy)
-		{
-			listener.getLogger().println("....doing cluster deploy");
-            deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId);
-
-		} else
-		{
-			listener.getLogger().println("....doing serverGroup deploy");
-			deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId);
-		}
+		String deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId);
 		if (completeDeployment){
+			final long startTime = System.nanoTime();
+			final long timeout = Long.valueOf(this.startupTimeout);
 			muleRest.restfullyDeployDeploymentById(deploymentId);
 			String status;
 			do {
@@ -199,6 +191,8 @@ public class MMCDeployerBuilder extends Builder
 				listener.getLogger().println("....retreiving status: " + status);
 				if (status.equals("FAILED"))
 					throw new Exception("Startup failed.");
+				if (timeout > 0 && System.nanoTime() - startTime > timeout * 1000)
+					throw new Exception("Timeout during startup");
 			} while (status.equals("IN PROGRESS"));
 		}
 		listener.getLogger().println("Deployment finished");
@@ -301,10 +295,7 @@ public class MMCDeployerBuilder extends Builder
 		return artifactVersion;
 	}
 
-	public Boolean isClusterDeploy()
-	{
-		return clusterDeploy;
-	}
+	public String getStartupTimeout() { return startupTimeout; }
 
 	public String clusterOrServerGroupName()
 	{

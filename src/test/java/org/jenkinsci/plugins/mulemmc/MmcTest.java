@@ -33,8 +33,6 @@ public class MmcTest {
 	public static void main(String args[]) throws Exception {
 		PropertyConfigurator.configure("src/test/resources/log4j.properties");
 		
-		logger.debug("Testing upload");
-		
 		File testFile = new File("/Users/eberman/Development/MuleSoft/mule/mule-enterprise-standalone-3.4.2/examples/echo/mule-example-echo-3.4.2.zip");
 		
         HttpClient httpclient = new HttpClient();

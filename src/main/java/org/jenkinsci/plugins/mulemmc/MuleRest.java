@@ -164,7 +164,7 @@ public class MuleRest
      * @param targetName name of the target, either a server, a server group or a cluster
      */
     private void undeploy(String applicationName, String targetName) throws Exception {
-        logger.fine(">>>> undeploy " + applicationName + " from " + targetName);
+        logger.info(">>>> undeploy " + applicationName + " from " + targetName);
 
         Set<String> deploymentIds = getDeployments(applicationName, targetName);
 
@@ -174,7 +174,7 @@ public class MuleRest
     }
 
     private void restfullyUndeployById(String deploymentId) throws Exception {
-        logger.fine(">>>> restfullyUndeployById " + deploymentId);
+        logger.info(">>>> restfullyUndeployById " + deploymentId);
 
         HttpClient httpClient = configureHttpClient();
         PostMethod post = new PostMethod(mmcUrl + "/deployments/" + deploymentId + "/undeploy");
@@ -233,7 +233,6 @@ public class MuleRest
         HashSet<String> deploymentIds = new HashSet<>();
         for (JsonNode deploymentNode : deploymentsNode) {
             if (!"DEPLOYED".equals(deploymentNode.path("status").asText())) {
-                logger.fine(">>>> restfullyGetDeployment ignoring " + deploymentNode.asText() + " because status is " + deploymentNode.path("status").asText());
                 continue;
             }
 
@@ -278,7 +277,7 @@ public class MuleRest
 
     private void restfullyDeleteDeployment(String name) throws Exception
 	{
-		logger.fine(">>>> restfullyDeleteDeployment " + name);
+		logger.info(">>>> restfullyDeleteDeployment " + name);
 
 		String deploymentId = restfullyGetDeploymentId(name);
 		if (deploymentId != null)
@@ -290,7 +289,7 @@ public class MuleRest
 
 	private void restfullyDeleteDeploymentById(String deploymentId) throws Exception
 	{
-		logger.fine(">>>>restfullyDeleteDeploymentById " + deploymentId);
+		logger.info(">>>>restfullyDeleteDeploymentById " + deploymentId);
 
 		HttpClient httpClient = configureHttpClient();
 
@@ -304,7 +303,7 @@ public class MuleRest
 
 	public void restfullyDeployDeploymentById(String deploymentId) throws Exception
 	{
-		logger.fine(">>>>restfullyDeployDeploymentById " + deploymentId);
+		logger.info(">>>>restfullyDeployDeploymentById " + deploymentId);
 
 		HttpClient httpClient = configureHttpClient();
 
@@ -480,7 +479,7 @@ public class MuleRest
 
 	public String restfullyUploadRepository(String name, String version, File packageFile) throws Exception
 	{
-		logger.fine(">>>>restfullyUploadRepository " + name + " " + version + " " + packageFile);
+		logger.info(">>>>restfullyUploadRepository " + name + " " + version + " " + packageFile);
 
 		// delete application first
 		if (isSnapshotVersion(version))
@@ -524,7 +523,7 @@ public class MuleRest
 
 	private void restfullyDeleteApplicationById(String applicationVersionId) throws Exception
 	{
-		logger.fine(">>>>restfullyDeleteApplicationById " + applicationVersionId);
+		logger.info(">>>>restfullyDeleteApplicationById " + applicationVersionId);
 
 		HttpClient httpClient = configureHttpClient();
 
@@ -538,7 +537,7 @@ public class MuleRest
 
 	private void restfullyDeleteApplication(String applicationName, String version) throws Exception
 	{
-		logger.fine(">>>>restfullyDeleteApplication " + applicationName + "" + version);
+		logger.info(">>>>restfullyDeleteApplication " + applicationName + "" + version);
 
 		String applicationVersionId = restfullyGetApplicationId(applicationName, version);
 		if (applicationVersionId != null)
