@@ -69,10 +69,9 @@ public class MuleRest
      * @param targetName id of the deployment-target. can be either a single Server, a ServerGroup or a Cluster
      * @param applicationName name of the application to deploy
      * @param versionId id of the version-application to deploy
-     * @param deleteOldDeployments whether to delete deployments with other versions of the application on that target
      * @return id of the generated deployment
      */
-	public String restfullyCreateDeployment(String deploymentName, String targetName, String applicationName, String versionId, boolean deleteOldDeployments) throws Exception
+	public String restfullyCreateDeployment(String deploymentName, String targetName, String applicationName, String versionId) throws Exception
 	{
 		logger.fine(">>>> restfullyCreateDeployment " + deploymentName + " " + targetName + " " + versionId);
 
@@ -84,11 +83,6 @@ public class MuleRest
         String clusterId = restfullyGetClusterId(targetName);
         if (serverId == null && clusterId == null)
             throw new IllegalArgumentException("no server, server group or cluster found having the name " + targetName);
-
-		// delete existing deployment before creating new one
-		restfullyDeleteDeployment(deploymentName);
-        // undeploy other versions of that application on that target
-        undeploy(applicationName, targetName, deleteOldDeployments);
 
 		HttpClient httpClient = configureHttpClient();
 
@@ -167,17 +161,24 @@ public class MuleRest
 	 * undeployed (and deleted).
      * @param applicationName name of the application
      * @param targetName name of the target, either a server, a server group or a cluster
-     * @param deleteOldDeployments whether the undeployed deployment are deleted
      */
-    private void undeploy(String applicationName, String targetName, boolean deleteOldDeployments) throws Exception {
+    public void undeploy(String applicationName, String targetName) throws Exception {
         logger.info(">>>> undeploy " + applicationName + " from " + targetName);
 
-        Set<String> deploymentIds = getDeployments(applicationName, targetName);
+        Set<String> deploymentIds = getDeployedDeployments(applicationName, targetName);
 
         for (String deploymentId : deploymentIds) {
             restfullyUndeployById(deploymentId);
-            if (deleteOldDeployments)
-           	    restfullyDeleteDeploymentById(deploymentId);
+        }
+    }
+
+    public void deleteDeployments(String applicationName, String targetName) throws Exception {
+        logger.info(">>>> delete deployments with " + applicationName + " on " + targetName);
+
+        Set<String> deploymentIds = getAllDeployments(applicationName, targetName);
+
+        for (String deploymentId : deploymentIds) {
+            restfullyDeleteDeploymentById(deploymentId);
         }
     }
 
@@ -191,7 +192,17 @@ public class MuleRest
         processResponseCode(statusCode);
     }
 
-    private Set<String> getDeployments(String applicationName, String targetName) throws Exception {
+    private Set<String> getDeployedDeployments(String applicationName, String targetName) throws Exception {
+
+        return getDeployments(applicationName, targetName, true);
+    }
+
+    private Set<String> getAllDeployments(String applicationName, String targetName) throws Exception {
+
+        return getDeployments(applicationName, targetName, false);
+    }
+
+    private Set<String> getDeployments(String applicationName, String targetName, boolean deployedOnly) throws Exception {
 
         final String applicationId = restfullyGetApplicationId(applicationName);
         final HashSet<String> versionIds = restfullyGetVersionIds(applicationId);
@@ -200,15 +211,15 @@ public class MuleRest
 
         final String serverId = restfullyGetServerId(targetName);
         if (serverId != null)
-            deploymentIds.addAll(restfullyGetDeployments(versionIds, serverId, SERVER_TYPE.SERVER));
+            deploymentIds.addAll(restfullyGetDeployedDeployments(versionIds, serverId, SERVER_TYPE.SERVER, deployedOnly));
 
         final String serverGroupId = restfullyGetServerGroupId(targetName);
         if (serverGroupId != null)
-            deploymentIds.addAll(restfullyGetDeployments(versionIds, serverGroupId, SERVER_TYPE.GROUP));
+            deploymentIds.addAll(restfullyGetDeployedDeployments(versionIds, serverGroupId, SERVER_TYPE.GROUP, deployedOnly));
 
         final String clusterId = restfullyGetClusterId(targetName);
         if (clusterId != null)
-            deploymentIds.addAll(restfullyGetDeployments(versionIds, clusterId, SERVER_TYPE.CLUSTER));
+            deploymentIds.addAll(restfullyGetDeployedDeployments(versionIds, clusterId, SERVER_TYPE.CLUSTER, deployedOnly));
 
         return deploymentIds;
     }
@@ -234,7 +245,7 @@ public class MuleRest
 
 		processResponseCode(statusCode);
 
-		logger.fine(">>>> restfullyGetDeployments response " + get.getResponseBodyAsString());
+		logger.fine(">>>> restfullyGetDeployedDeployments response " + get.getResponseBodyAsString());
 
 		InputStream responseStream = get.getResponseBodyAsStream();
 		JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
@@ -242,7 +253,15 @@ public class MuleRest
 		return STATUS_DEPLOYED.equals(status);
 	}
 
-    private Set<String> restfullyGetDeployments(HashSet<String> versionIds, String targetId, SERVER_TYPE serverType) throws Exception {
+    public Set<String> getAllDeployments(HashSet<String> versionIds, String targetId, SERVER_TYPE serverType) throws Exception {
+        return restfullyGetDeployedDeployments(versionIds, targetId, serverType, false);
+    }
+
+    public Set<String> getDeployedDeployments(HashSet<String> versionIds, String targetId, SERVER_TYPE serverType) throws Exception {
+        return restfullyGetDeployedDeployments(versionIds, targetId, serverType, true);
+    }
+
+    private Set<String> restfullyGetDeployedDeployments(HashSet<String> versionIds, String targetId, SERVER_TYPE serverType, boolean deployedOnly) throws Exception {
         HttpClient httpClient = configureHttpClient();
         GetMethod get = new GetMethod(mmcUrl + "/deployments?" + serverType.queryString + "=" + targetId);
 
@@ -250,7 +269,7 @@ public class MuleRest
 
         processResponseCode(statusCode);
 
-        logger.fine(">>>> restfullyGetDeployments response " + get.getResponseBodyAsString());
+        logger.fine(">>>> restfullyGetDeployedDeployments response " + get.getResponseBodyAsString());
 
         InputStream responseStream = get.getResponseBodyAsStream();
         JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
@@ -258,7 +277,7 @@ public class MuleRest
 
         HashSet<String> deploymentIds = new HashSet<>();
         for (JsonNode deploymentNode : deploymentsNode) {
-            if (!STATUS_DEPLOYED.equals(deploymentNode.path("status").asText())) {
+            if (deployedOnly && !STATUS_DEPLOYED.equals(deploymentNode.path("status").asText())) {
                 continue;
             }
 
@@ -271,7 +290,7 @@ public class MuleRest
                 }
             }
         }
-        logger.fine(">>>> restfullyGetDeployments returns " + deploymentIds);
+        logger.fine(">>>> restfullyGetDeployedDeployments returns " + deploymentIds);
 
         return deploymentIds;
     }
@@ -301,7 +320,7 @@ public class MuleRest
         return versions;
     }
 
-    private void restfullyDeleteDeployment(String name) throws Exception
+    public void restfullyDeleteDeployment(String name) throws Exception
 	{
 		logger.info(">>>> restfullyDeleteDeployment " + name);
 

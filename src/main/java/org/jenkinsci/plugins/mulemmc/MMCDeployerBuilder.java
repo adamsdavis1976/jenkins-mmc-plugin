@@ -182,7 +182,16 @@ public class MMCDeployerBuilder extends Builder
 	{
 		listener.getLogger().println("Deployment starting (" + theApplicationName + " " + theVersion + " to " + clusterOrServerGroupName + ")...");
 		String versionId = muleRest.restfullyUploadRepository(theApplicationName, theVersion, aFile);
-		String deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId, deleteOldDeployments);
+        // delete existing deployment before creating new one
+        muleRest.restfullyDeleteDeployment(theDeploymentName);
+        // undeploy other versions of that application on that target
+        muleRest.undeploy(theApplicationName, clusterOrServerGroupName);
+
+        if (deleteOldDeployments) {
+            muleRest.deleteDeployments(theApplicationName, clusterOrServerGroupName);
+        }
+
+        String deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId);
 		if (completeDeployment){
 			final long startTime = System.nanoTime();
 			final long timeout = Long.valueOf(this.startupTimeout);
