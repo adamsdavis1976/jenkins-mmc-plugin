@@ -26,9 +26,11 @@ import java.util.logging.Logger;
 
 public class MuleRest
 {
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 	private static final Logger logger = Logger.getLogger(MuleRest.class.getName());
 	private static final String SNAPSHOT = "SNAPSHOT";
+
+	public static final String STATUS_DEPLOYED = "DEPLOYED";
 
 	private URL mmcUrl;
 	private String username;
@@ -67,9 +69,10 @@ public class MuleRest
      * @param targetName id of the deployment-target. can be either a single Server, a ServerGroup or a Cluster
      * @param applicationName name of the application to deploy
      * @param versionId id of the version-application to deploy
+     * @param deleteOldDeployments whether to delete deployments with other versions of the application on that target
      * @return id of the generated deployment
      */
-	public String restfullyCreateDeployment(String deploymentName, String targetName, String applicationName, String versionId) throws Exception
+	public String restfullyCreateDeployment(String deploymentName, String targetName, String applicationName, String versionId, boolean deleteOldDeployments) throws Exception
 	{
 		logger.fine(">>>> restfullyCreateDeployment " + deploymentName + " " + targetName + " " + versionId);
 
@@ -85,7 +88,7 @@ public class MuleRest
 		// delete existing deployment before creating new one
 		restfullyDeleteDeployment(deploymentName);
         // undeploy other versions of that application on that target
-        undeploy(applicationName, targetName);
+        undeploy(applicationName, targetName, deleteOldDeployments);
 
 		HttpClient httpClient = configureHttpClient();
 
@@ -159,17 +162,22 @@ public class MuleRest
     }
 
     /**
-     * Undeploy an application on a targert
+     * Undeploy an application from a target
+	 * All deployments are searched for where any version of the application is deployed to a target, and those deployments are
+	 * undeployed (and deleted).
      * @param applicationName name of the application
      * @param targetName name of the target, either a server, a server group or a cluster
+     * @param deleteOldDeployments whether the undeployed deployment are deleted
      */
-    private void undeploy(String applicationName, String targetName) throws Exception {
+    private void undeploy(String applicationName, String targetName, boolean deleteOldDeployments) throws Exception {
         logger.info(">>>> undeploy " + applicationName + " from " + targetName);
 
         Set<String> deploymentIds = getDeployments(applicationName, targetName);
 
         for (String deploymentId : deploymentIds) {
             restfullyUndeployById(deploymentId);
+            if (deleteOldDeployments)
+           	    restfullyDeleteDeploymentById(deploymentId);
         }
     }
 
@@ -216,6 +224,24 @@ public class MuleRest
         String queryString;
     }
 
+	/** Check whether a deployment is deployed.
+	 * @param deploymentId id of the deployment
+	 */
+	protected boolean isDeployed(String deploymentId) throws Exception {
+		HttpClient httpClient = configureHttpClient();
+		GetMethod get = new GetMethod(mmcUrl + "/deployments/" + deploymentId);
+		int statusCode = httpClient.executeMethod(get);
+
+		processResponseCode(statusCode);
+
+		logger.fine(">>>> restfullyGetDeployments response " + get.getResponseBodyAsString());
+
+		InputStream responseStream = get.getResponseBodyAsStream();
+		JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
+		String status = jsonNode.path("data[0].status").asText();
+		return STATUS_DEPLOYED.equals(status);
+	}
+
     private Set<String> restfullyGetDeployments(HashSet<String> versionIds, String targetId, SERVER_TYPE serverType) throws Exception {
         HttpClient httpClient = configureHttpClient();
         GetMethod get = new GetMethod(mmcUrl + "/deployments?" + serverType.queryString + "=" + targetId);
@@ -232,7 +258,7 @@ public class MuleRest
 
         HashSet<String> deploymentIds = new HashSet<>();
         for (JsonNode deploymentNode : deploymentsNode) {
-            if (!"DEPLOYED".equals(deploymentNode.path("status").asText())) {
+            if (!STATUS_DEPLOYED.equals(deploymentNode.path("status").asText())) {
                 continue;
             }
 

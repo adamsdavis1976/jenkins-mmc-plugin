@@ -7,10 +7,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-import java.io.IOException;
 import java.io.PrintStream;
 
-import static org.junit.Assert.*;
 /**
  * Created by christianlangmann on 22/03/2017.
  */
@@ -38,10 +36,10 @@ public class MMCDeployerBuilderTest {
 
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
-        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
+        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID, false)).thenReturn(DEPLOYMENTID);
         when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "DEPLOYED");
         MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
-                "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, "-1");
+                "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false, "-1");
         deployer.doDeploy(buildListener, mockRest, null, TARGET_NAME, VERSION, APP_NAME, DEPLOYMENT_NAME);
     }
 
@@ -49,10 +47,10 @@ public class MMCDeployerBuilderTest {
     public void testDoDeployWithTimeout() throws Exception {
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
-        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
+        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID, false)).thenReturn(DEPLOYMENTID);
         when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "DEPLOYED");
         MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
-                "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, "1");
+                "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false,  "1");
         deployer.doDeploy(buildListener, mockRest, null, TARGET_NAME, VERSION, APP_NAME, DEPLOYMENT_NAME);
     }
 
@@ -60,10 +58,10 @@ public class MMCDeployerBuilderTest {
     public void testDoDeployFailed() throws Exception {
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
-        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
+        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID, false)).thenReturn(DEPLOYMENTID);
         when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "FAILED");
         MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
-                "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, "-1");
+                "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false, "-1");
         deployer.doDeploy(buildListener, mockRest, null, TARGET_NAME, VERSION, APP_NAME, DEPLOYMENT_NAME);
     }
 
@@ -71,10 +69,10 @@ public class MMCDeployerBuilderTest {
     public void testDoDeployWithInvalidTimeout() throws Exception {
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
-        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
+        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID, false)).thenReturn(DEPLOYMENTID);
         when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "FAILED");
         MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
-                "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, "");
+                "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false, "");
         deployer.doDeploy(buildListener, mockRest, null, TARGET_NAME, VERSION, APP_NAME, DEPLOYMENT_NAME);
     }
 

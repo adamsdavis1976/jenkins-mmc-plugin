@@ -45,6 +45,10 @@
         <f:textbox default="" />
     </f:entry>
 
+    <f:entry title="Delete old deployments" field="deleteOldDeployments" description="check whether the deployments that are undeployed should be deleted">
+        <f:checkbox default="true" />
+    </f:entry>
+
     <f:entry title="Deploy After Upload" field="completeDeployment" description="If True the plugin will attempt to activate the deployment after upload is complete">
         <f:checkbox />
     </f:entry>

@@ -46,10 +46,11 @@ public class MMCDeployerBuilder extends Builder
 	public final String clusterOrServerGroupName;
 	public final boolean deployWithPomDetails;
 	public final String startupTimeout;
+	public final boolean deleteOldDeployments;
 
 	@DataBoundConstructor
 	public MMCDeployerBuilder(String mmcUrl, String user, String password, boolean completeDeployment, String clusterOrServerGroupName,
-	        String fileLocation, String artifactName, String deploymentName, String artifactVersion, String startupTimeout) {
+	        String fileLocation, String artifactName, String deploymentName, String artifactVersion, boolean deleteOldDeployments, String startupTimeout) {
 		this.mmcUrl = mmcUrl;
 		this.user = user;
 		this.password = password;
@@ -61,6 +62,7 @@ public class MMCDeployerBuilder extends Builder
 		this.completeDeployment = completeDeployment;
 		this.deployWithPomDetails = true;
 		this.startupTimeout = startupTimeout;
+		this.deleteOldDeployments = deleteOldDeployments;
 	}
 
 	@Override
@@ -180,7 +182,7 @@ public class MMCDeployerBuilder extends Builder
 	{
 		listener.getLogger().println("Deployment starting (" + theApplicationName + " " + theVersion + " to " + clusterOrServerGroupName + ")...");
 		String versionId = muleRest.restfullyUploadRepository(theApplicationName, theVersion, aFile);
-		String deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId);
+		String deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId, deleteOldDeployments);
 		if (completeDeployment){
 			final long startTime = System.nanoTime();
 			final long timeout = Long.valueOf(this.startupTimeout);
