@@ -75,6 +75,7 @@ public class MMCDeployerBuilder extends Builder
 		listener.getLogger().println(">>> USER IS " + user);
 		listener.getLogger().println(">>> File URL IS " + fileLocation);
 		listener.getLogger().println(">>> ArtifactName IS " + artifactName);
+        listener.getLogger().println(">>> Artifact Version IS  " + artifactVersion);
 		listener.getLogger().println(">>> DeploymentName IS " + deploymentName);
 		listener.getLogger().println(">>> clusterOrServerGroupName IS " + clusterOrServerGroupName);
 		listener.getLogger().println(">>> Beginning deployment....");
@@ -88,11 +89,15 @@ public class MMCDeployerBuilder extends Builder
 
 			if (build instanceof MavenModuleSetBuild)
 			{
-                success = deployMavenBuild((MavenModuleSetBuild) build, listener, success, envVars, muleRest);
+                success = deployMavenBuild((MavenModuleSetBuild) build, listener, envVars, muleRest);
 			} else {
-                success = deployFreestyleProject(build, listener, success, envVars, muleRest);
-			}
-
+                if (artifactVersion != null && artifactVersion.length()>0 && artifactName != null && artifactName.length()>0 )
+                {
+                    success = deployFreestyleProject(build, listener, envVars, muleRest);
+                } else {
+                    listener.getLogger().println("Plugin configuration for Artifact id/version required for Freestyle project. ");
+                }
+            }
 		} catch (IOException e)
 		{
 			listener.getLogger().println(e.toString());
@@ -108,22 +113,21 @@ public class MMCDeployerBuilder extends Builder
 		return success;
 	}
 
-    private boolean deployFreestyleProject(AbstractBuild<?, ?> build, BuildListener listener, boolean success, EnvVars envVars, MuleRest muleRest) throws Exception {
+    private boolean deployFreestyleProject(AbstractBuild<?, ?> build, BuildListener listener, EnvVars envVars, MuleRest muleRest) throws Exception {
         listener.getLogger().println("doing freestyle project deploy - using plugin configuration");
-        if (artifactVersion != null && artifactVersion.length()>0 && artifactName != null && artifactName.length()>0 )
+        boolean success = true;
+        final FilePath[] deploymentArtifacts = build.getWorkspace().list(this.fileLocation);
+        if (deploymentArtifacts.length == 0) {
+            throw new Exception("No artifacts found for deployment");
+        }
+        for (FilePath file : deploymentArtifacts)
         {
-            final FilePath[] deploymentArtifacts = build.getWorkspace().list(this.fileLocation);
-            if (deploymentArtifacts.length == 0) {
-                throw new Exception("No artifacts found for deployment");
-            }
-            for (FilePath file : deploymentArtifacts)
-            {
-                listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " + hudson.Util.replaceMacro(artifactName, envVars));
-                listener.getLogger().println(">>>>>>>>>>>> VERSION: " +hudson.Util.replaceMacro(artifactVersion, envVars));
-                listener.getLogger().println(">>>>>>>>>>>> FILE: "+ file.getRemote());
-                listener.getLogger().println(">>>>>>>>>>>> SERVER: " +hudson.Util.replaceMacro(clusterOrServerGroupName, envVars));
-                listener.getLogger().println(">>>>>>>>>>>> DEPLOYMENT: " +hudson.Util.replaceMacro(deploymentName, envVars));
-
+            listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " + hudson.Util.replaceMacro(artifactName, envVars));
+            listener.getLogger().println(">>>>>>>>>>>> VERSION: " +hudson.Util.replaceMacro(artifactVersion, envVars));
+            listener.getLogger().println(">>>>>>>>>>>> FILE: "+ file.getRemote());
+            listener.getLogger().println(">>>>>>>>>>>> SERVER: " +hudson.Util.replaceMacro(clusterOrServerGroupName, envVars));
+            listener.getLogger().println(">>>>>>>>>>>> DEPLOYMENT: " +hudson.Util.replaceMacro(deploymentName, envVars));
+            try {
                 doDeploy(listener,
                         muleRest,
                         new File(file.getRemote()),
@@ -131,21 +135,23 @@ public class MMCDeployerBuilder extends Builder
                         hudson.Util.replaceMacro(artifactVersion, envVars),
                         hudson.Util.replaceMacro(artifactName, envVars),
                         hudson.Util.replaceMacro(deploymentName, envVars));
-
-                success = true;
+            } catch (Exception e) {
+                success = false;
+                listener.getLogger().println("Deployment failed, undeploying...");
+                doUndeploy(listener,
+                        muleRest,
+                        hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
+                        hudson.Util.replaceMacro(artifactVersion, envVars),
+                        hudson.Util.replaceMacro(artifactName, envVars),
+                        hudson.Util.replaceMacro(deploymentName, envVars));
             }
-        }
-        else
-        {
-            listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " +artifactName);
-            listener.getLogger().println(">>>>>>>>>>>> VERSION: " +artifactVersion);
-            throw new Exception("Plugin configuration for Artifact id/version required for Freestyle project. ");
         }
         return success;
     }
 
-    private boolean deployMavenBuild(MavenModuleSetBuild build, BuildListener listener, boolean success, EnvVars envVars, MuleRest muleRest) throws Exception {
+    private boolean deployMavenBuild(MavenModuleSetBuild build, BuildListener listener, EnvVars envVars, MuleRest muleRest) throws Exception {
         listener.getLogger().println("doing maven deploy based on maven artifact details in POM");
+        boolean success = true;
         for (final List<MavenBuild> mavenBuilds : build.getModuleBuilds().values())
         {
             for (final MavenBuild mavenBuild : mavenBuilds)
@@ -163,14 +169,24 @@ public class MMCDeployerBuilder extends Builder
                         listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " + nextAttached.artifactId);
                         listener.getLogger().println(">>>>>>>>>>>> VERSION: " + nextAttached.version);
                         listener.getLogger().println(">>>>>>>>>>>> FILE: " + nextAttached.getFile(mavenBuild).getAbsolutePath());
-                        doDeploy(listener,
-                                muleRest,
-                                nextAttached.getFile(mavenBuild),
-                                hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
-                                nextAttached.version,
-                                nextAttached.artifactId,
-                                deploymentName);
-                        success = true;
+                        try {
+							doDeploy(listener,
+									muleRest,
+									nextAttached.getFile(mavenBuild),
+									hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
+									nextAttached.version,
+									nextAttached.artifactId,
+									deploymentName);
+						} catch (Exception e) {
+                        	success = false;
+							listener.getLogger().println("Deployment failed, undeploying...");
+							doUndeploy(listener,
+									muleRest,
+									hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
+									nextAttached.version,
+									nextAttached.artifactId,
+									deploymentName);
+						}
                     }
                 }
             }
@@ -198,15 +214,24 @@ public class MMCDeployerBuilder extends Builder
 			muleRest.restfullyDeployDeploymentById(deploymentId);
 			String status;
 			do {
+                if (timeout > 0 && (System.nanoTime() - startTime) > timeout * 1000)
+                    throw new Exception("Timeout during startup");
 				status = muleRest.restfullyWaitStartupForCompletion(deploymentId);
 				listener.getLogger().println("....retreiving status: " + status);
+				Thread.sleep(50);
 				if (status.equals("FAILED"))
 					throw new Exception("Startup failed.");
-				if (timeout > 0 && System.nanoTime() - startTime > timeout * 1000)
-					throw new Exception("Timeout during startup");
 			} while (status.equals("IN PROGRESS"));
 		}
 		listener.getLogger().println("Deployment finished");
+	}
+
+	protected void doUndeploy(BuildListener listener, MuleRest muleRest, String clusterOrServerGroupName, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
+	{
+		listener.getLogger().println("Undeployment starting (" + theApplicationName + " " + theVersion + " to " + clusterOrServerGroupName + ")...");
+		// delete existing deployment before creating new one
+		muleRest.restfullyDeleteDeployment(theDeploymentName);
+		listener.getLogger().println("Undeployment finished");
 	}
 
 	// Overridden for better type safety.

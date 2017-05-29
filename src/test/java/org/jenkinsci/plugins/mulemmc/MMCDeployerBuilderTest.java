@@ -2,12 +2,19 @@ package org.jenkinsci.plugins.mulemmc;
 
 import static org.mockito.Mockito.*;
 
+import hudson.EnvVars;
+import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Environment;
+import hudson.model.EnvironmentList;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
+import org.hamcrest.*;
 
 import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Created by christianlangmann on 22/03/2017.
@@ -74,6 +81,45 @@ public class MMCDeployerBuilderTest {
         MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
                 "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false, "");
         deployer.doDeploy(buildListener, mockRest, null, TARGET_NAME, VERSION, APP_NAME, DEPLOYMENT_NAME);
+    }
+
+    @Test
+    public void testDeployFreestyleProjectWithoutArtifact() throws Exception {
+
+        MuleRest mockRest = Mockito.mock(MuleRest.class);
+        AbstractBuild mockBuild = Mockito.mock(AbstractBuild.class);
+        when(mockBuild.getEnvironment(buildListener)).thenReturn(new EnvVars());
+        final String file = null;
+        MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
+                file, APP_NAME, DEPLOYMENT_NAME, VERSION, false, "");
+        boolean result = deployer.perform(mockBuild, null, buildListener);
+        assert(!result);
+    }
+
+    @Test
+    public void testDeployFreestyleProjectWithoutAppname() throws Exception {
+
+        MuleRest mockRest = Mockito.mock(MuleRest.class);
+        AbstractBuild mockBuild = Mockito.mock(AbstractBuild.class);
+        when(mockBuild.getEnvironment(buildListener)).thenReturn(new EnvVars());
+        final String file = null;
+        MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
+                "test.zip", null, DEPLOYMENT_NAME, VERSION, false, "");
+        boolean result = deployer.perform(mockBuild, null, buildListener);
+        assert(!result);
+    }
+
+    @Test
+    public void testDeployFreestyleProjectWithoutVersion() throws Exception {
+
+        MuleRest mockRest = Mockito.mock(MuleRest.class);
+        AbstractBuild mockBuild = Mockito.mock(AbstractBuild.class);
+        when(mockBuild.getEnvironment(buildListener)).thenReturn(new EnvVars());
+        final String file = null;
+        MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
+                "test.zip", APP_NAME, DEPLOYMENT_NAME, null, false, "");
+        boolean result = deployer.perform(mockBuild, null, buildListener);
+        assert(!result);
     }
 
 }
