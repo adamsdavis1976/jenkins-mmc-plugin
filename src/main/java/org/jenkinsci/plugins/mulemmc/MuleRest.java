@@ -41,7 +41,7 @@ public class MuleRest
 		this.mmcUrl = mmcUrl;
 		this.username = username;
 		this.password = password;
-		logger.finer("MMC URL: {}, Username: {}" + " " + mmcUrl + " " + username);
+		logger.finer("MMC URL: " + mmcUrl + ", Username: " + username);
 	}
 	
 	private void processResponseCode(int code) throws Exception
@@ -333,7 +333,7 @@ public class MuleRest
 
 	private void restfullyDeleteDeploymentById(String deploymentId) throws Exception
 	{
-		logger.info(">>>>restfullyDeleteDeploymentById " + deploymentId);
+		logger.info(">>>> restfullyDeleteDeploymentById " + deploymentId);
 
 		HttpClient httpClient = configureHttpClient();
 
@@ -347,7 +347,7 @@ public class MuleRest
 
 	public void restfullyDeployDeploymentById(String deploymentId) throws Exception
 	{
-		logger.info(">>>>restfullyDeployDeploymentById " + deploymentId);
+		logger.info(">>>> restfullyDeployDeploymentById " + deploymentId);
 
 		HttpClient httpClient = configureHttpClient();
 
@@ -370,51 +370,47 @@ public class MuleRest
 
 		int statusCode = httpClient.executeMethod(get);
 		if (statusCode!=200)
-			logger.fine(">>>>restfullyCreateDeployment error response " + get.getResponseBodyAsString());
+			logger.info(">>>> restfullyCreateDeployment error response " + get.getResponseBodyAsString());
 
 		processResponseCode(statusCode);
-
 		InputStream responseStream = get.getResponseBodyAsStream();
 		JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
 		String status = jsonNode.path("status").asText();
-		logger.fine(">>>>restfullyCreateDeployment status "+ status);
+		logger.fine(">>>> restfullyCreateDeployment status "+ status);
 		return status;
 	}
 
 	private String restfullyGetDeploymentId(String name) throws Exception
 	{
-		logger.fine(">>>>restfullyGetDeploymentId " + name);
+		logger.fine(">>>> restfullyGetDeploymentId " + name);
 
 		HttpClient httpClient = configureHttpClient();
-
 		GetMethod get = new GetMethod(mmcUrl + "/deployments");
-
 		int statusCode = httpClient.executeMethod(get);
-
 		processResponseCode(statusCode);
 
+		String deploymentId = null;
 		InputStream responseStream = get.getResponseBodyAsStream();
 		JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
 		JsonNode deploymentsNode = jsonNode.path("data");
 		for (JsonNode deploymentNode : deploymentsNode)
 		{
 			if (name.equals(deploymentNode.path("name").asText())) {
-                return deploymentNode.path("id").asText();
+                deploymentId = deploymentNode.path("id").asText();
+                break;
 			}
 		}
-		return null;
+        logger.fine(">>>> restfullyGetDeploymentId => " + deploymentId);
+		return deploymentId;
 	}
 
-	private String restfullyGetApplicationId(String name, String version) throws Exception
+	private String restfullyGetVersionId(String name, String version) throws Exception
 	{
-		logger.fine(">>>>restfullyGetApplicationId " + name + " " + version);
+		logger.fine(">>>> restfullyGetVersionId " + name + " " + version);
 
 		HttpClient httpClient = configureHttpClient();
-
 		GetMethod get = new GetMethod(mmcUrl + "/repository");
-
 		int statusCode = httpClient.executeMethod(get);
-
 		processResponseCode(statusCode);
 
 		InputStream responseStream = get.getResponseBodyAsStream();
@@ -428,12 +424,13 @@ public class MuleRest
 				for (JsonNode versionNode : versionsNode)
 				{
 					if (version.equals(versionNode.path("name").asText())) {
-                        return versionNode.get("id").asText();
+                        String versionId = versionNode.get("id").asText();
+                        logger.fine(">>>> restfullyGetVersionId => " + versionId);
+                        return versionId;
 					}
 				}
 			}
 		}
-
 		return null;
 	}
 
@@ -549,7 +546,7 @@ public class MuleRest
 		} else{
 			logger.info("ARTIFACT " + name + " " + version + " ALREADY EXISTS in MMC. Creating Deployment using Pre-Existing Artifact (Not-Overwriting)");
 			post.releaseConnection();
-			return restfullyGetApplicationId(name, version);
+			return restfullyGetVersionId(name, version);
 		}
 
 		String responseObject = post.getResponseBodyAsString();
@@ -576,7 +573,7 @@ public class MuleRest
 	{
 		logger.info(">>>> restfullyDeleteApplication " + applicationName + " " + version);
 
-		String applicationVersionId = restfullyGetApplicationId(applicationName, version);
+		String applicationVersionId = restfullyGetVersionId(applicationName, version);
 		if (applicationVersionId != null)
 		{
 			restfullyDeleteApplicationById(applicationVersionId);

@@ -196,40 +196,49 @@ public class MMCDeployerBuilder extends Builder
 
     protected void doDeploy(BuildListener listener, MuleRest muleRest, File aFile, String clusterOrServerGroupName, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
 	{
-		listener.getLogger().println("Deployment starting (" + theApplicationName + " " + theVersion + " to " + clusterOrServerGroupName + ")...");
-		String versionId = muleRest.restfullyUploadRepository(theApplicationName, theVersion, aFile);
-        // delete existing deployment before creating new one
-        muleRest.restfullyDeleteDeployment(theDeploymentName);
-        // undeploy other versions of that application on that target
-        muleRest.undeploy(theApplicationName, clusterOrServerGroupName);
+		listener.getLogger().println("Deployment (" + theApplicationName + " " + theVersion + " to " + clusterOrServerGroupName + ")...");
+		try {
+            String versionId = muleRest.restfullyUploadRepository(theApplicationName, theVersion, aFile);
 
-        if (deleteOldDeployments) {
-            muleRest.deleteDeployments(theApplicationName, clusterOrServerGroupName);
+            // delete existing deployment with same name before creating new one
+            muleRest.restfullyDeleteDeployment(theDeploymentName);
+            // undeploy other versions of that application on that target
+            muleRest.undeploy(theApplicationName, clusterOrServerGroupName);
+
+            if (deleteOldDeployments) {
+                listener.getLogger().println("... delete deployments");
+                muleRest.deleteDeployments(theApplicationName, clusterOrServerGroupName);
+                listener.getLogger().println("... delete deployments finished");
+            }
+
+            listener.getLogger().println("... create deployment");
+            String deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId);
+            listener.getLogger().println("... create deployment finished");
+
+            if (completeDeployment) {
+                listener.getLogger().println("... start deployment");
+                final long startTime = System.nanoTime();
+                final long timeout = Long.valueOf(this.startupTimeout);
+                muleRest.restfullyDeployDeploymentById(deploymentId);
+                String status;
+                do {
+                    if (timeout > 0 && (System.nanoTime() - startTime) > timeout * 1000)
+                        throw new Exception("Timeout during startup");
+                    status = muleRest.restfullyWaitStartupForCompletion(deploymentId);
+                    listener.getLogger().println("....retreiving status: " + status);
+                    Thread.sleep(50);
+                    if (status.equals("FAILED"))
+                        throw new Exception("Startup failed.");
+                } while (status.equals("IN PROGRESS"));
+            }
+        } finally {
+            listener.getLogger().println("Deployment finished");
         }
-
-        String deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId);
-		if (completeDeployment){
-			final long startTime = System.nanoTime();
-			final long timeout = Long.valueOf(this.startupTimeout);
-			muleRest.restfullyDeployDeploymentById(deploymentId);
-			String status;
-			do {
-                if (timeout > 0 && (System.nanoTime() - startTime) > timeout * 1000)
-                    throw new Exception("Timeout during startup");
-				status = muleRest.restfullyWaitStartupForCompletion(deploymentId);
-				listener.getLogger().println("....retreiving status: " + status);
-				Thread.sleep(50);
-				if (status.equals("FAILED"))
-					throw new Exception("Startup failed.");
-			} while (status.equals("IN PROGRESS"));
-		}
-		listener.getLogger().println("Deployment finished");
 	}
 
 	protected void doUndeploy(BuildListener listener, MuleRest muleRest, String clusterOrServerGroupName, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
 	{
 		listener.getLogger().println("Undeployment starting (" + theApplicationName + " " + theVersion + " to " + clusterOrServerGroupName + ")...");
-		// delete existing deployment before creating new one
 		muleRest.restfullyDeleteDeployment(theDeploymentName);
 		listener.getLogger().println("Undeployment finished");
 	}
