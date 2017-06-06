@@ -17,6 +17,7 @@ import hudson.util.FormValidation;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,10 +48,11 @@ public class MMCDeployerBuilder extends Builder
 	public final boolean deployWithPomDetails;
 	public final String startupTimeout;
 	public final boolean deleteOldDeployments;
+	private final HttpClientFactory httpFactory;
 
 	@DataBoundConstructor
 	public MMCDeployerBuilder(String mmcUrl, String user, String password, boolean completeDeployment, String clusterOrServerGroupName,
-	        String fileLocation, String artifactName, String deploymentName, String artifactVersion, boolean deleteOldDeployments, String startupTimeout) {
+	        String fileLocation, String artifactName, String deploymentName, String artifactVersion, boolean deleteOldDeployments, String startupTimeout) throws MalformedURLException {
 		this.mmcUrl = mmcUrl;
 		this.user = user;
 		this.password = password;
@@ -63,6 +65,7 @@ public class MMCDeployerBuilder extends Builder
 		this.deployWithPomDetails = true;
 		this.startupTimeout = startupTimeout;
 		this.deleteOldDeployments = deleteOldDeployments;
+        this.httpFactory = new HttpClientFactory(mmcUrl, user, password);
 	}
 
 	@Override
@@ -83,9 +86,7 @@ public class MMCDeployerBuilder extends Builder
 		try
 		{
 			envVars = build.getEnvironment(listener);
-
-			// aFile = getFile(workspace, fileLocation);
-			MuleRest muleRest = new MuleRest(new URL(mmcUrl), user, password);
+			MuleRest muleRest = new MuleRest(new URL(mmcUrl), httpFactory.createHttpClient(), httpFactory.createHttpContext());
 
 			if (build instanceof MavenModuleSetBuild)
 			{
@@ -194,25 +195,25 @@ public class MMCDeployerBuilder extends Builder
         return success;
     }
 
-    protected void doDeploy(BuildListener listener, MuleRest muleRest, File aFile, String clusterOrServerGroupName, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
+    protected void doDeploy(BuildListener listener, MuleRest muleRest, File aFile, String target, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
 	{
-		listener.getLogger().println("Deployment (" + theApplicationName + " " + theVersion + " to " + clusterOrServerGroupName + ")...");
+		listener.getLogger().println("Deployment (" + theApplicationName + " " + theVersion + " to " + target + ")...");
 		try {
             String versionId = muleRest.restfullyUploadRepository(theApplicationName, theVersion, aFile);
 
             // delete existing deployment with same name before creating new one
             muleRest.restfullyDeleteDeployment(theDeploymentName);
             // undeploy other versions of that application on that target
-            muleRest.undeploy(theApplicationName, clusterOrServerGroupName);
+            muleRest.undeploy(theApplicationName, target);
 
             if (deleteOldDeployments) {
                 listener.getLogger().println("... delete deployments");
-                muleRest.deleteDeployments(theApplicationName, clusterOrServerGroupName);
+                muleRest.deleteDeployments(theApplicationName, target);
                 listener.getLogger().println("... delete deployments finished");
             }
 
             listener.getLogger().println("... create deployment");
-            String deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, clusterOrServerGroupName, theApplicationName, versionId);
+            String deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, target, versionId);
             listener.getLogger().println("... create deployment finished");
 
             if (completeDeployment) {

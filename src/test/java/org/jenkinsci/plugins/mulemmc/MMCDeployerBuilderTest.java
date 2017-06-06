@@ -28,6 +28,7 @@ public class MMCDeployerBuilderTest {
     public static final String FILENAME = "testapp.zip";
     public static final String VERSIONID = "versionid";
     public static final String DEPLOYMENTID = "deploymentid";
+    public static final String MMC_URL = "http://localhost/mmc/api";
 
     private static BuildListener buildListener;
 
@@ -43,9 +44,9 @@ public class MMCDeployerBuilderTest {
 
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
-        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
+        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
         when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "DEPLOYED");
-        MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
+        MMCDeployerBuilder deployer = new MMCDeployerBuilder(MMC_URL, null, null, true, TARGET_NAME,
                 "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false, "-1");
         deployer.doDeploy(buildListener, mockRest, null, TARGET_NAME, VERSION, APP_NAME, DEPLOYMENT_NAME);
     }
@@ -54,9 +55,9 @@ public class MMCDeployerBuilderTest {
     public void testDoDeployWithTimeout() throws Exception {
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
-        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
+        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
         when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "DEPLOYED");
-        MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
+        MMCDeployerBuilder deployer = new MMCDeployerBuilder(MMC_URL, null, null, true, TARGET_NAME,
                 "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false,  "1");
         deployer.doDeploy(buildListener, mockRest, null, TARGET_NAME, VERSION, APP_NAME, DEPLOYMENT_NAME);
     }
@@ -65,7 +66,7 @@ public class MMCDeployerBuilderTest {
     public void testDoDeployFailed() throws Exception {
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
-        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
+        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
         when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "FAILED");
         MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
                 "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false, "-1");
@@ -76,7 +77,7 @@ public class MMCDeployerBuilderTest {
     public void testDoDeployWithInvalidTimeout() throws Exception {
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
-        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, APP_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
+        when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
         when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "FAILED");
         MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
                 "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false, "");
@@ -90,7 +91,7 @@ public class MMCDeployerBuilderTest {
         AbstractBuild mockBuild = Mockito.mock(AbstractBuild.class);
         when(mockBuild.getEnvironment(buildListener)).thenReturn(new EnvVars());
         final String file = null;
-        MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
+        MMCDeployerBuilder deployer = new MMCDeployerBuilder(MMC_URL, null, null, true, TARGET_NAME,
                 file, APP_NAME, DEPLOYMENT_NAME, VERSION, false, "");
         boolean result = deployer.perform(mockBuild, null, buildListener);
         assert(!result);
@@ -103,7 +104,7 @@ public class MMCDeployerBuilderTest {
         AbstractBuild mockBuild = Mockito.mock(AbstractBuild.class);
         when(mockBuild.getEnvironment(buildListener)).thenReturn(new EnvVars());
         final String file = null;
-        MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
+        MMCDeployerBuilder deployer = new MMCDeployerBuilder(MMC_URL, null, null, true, TARGET_NAME,
                 "test.zip", null, DEPLOYMENT_NAME, VERSION, false, "");
         boolean result = deployer.perform(mockBuild, null, buildListener);
         assert(!result);
@@ -116,7 +117,7 @@ public class MMCDeployerBuilderTest {
         AbstractBuild mockBuild = Mockito.mock(AbstractBuild.class);
         when(mockBuild.getEnvironment(buildListener)).thenReturn(new EnvVars());
         final String file = null;
-        MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
+        MMCDeployerBuilder deployer = new MMCDeployerBuilder(MMC_URL, null, null, true, TARGET_NAME,
                 "test.zip", APP_NAME, DEPLOYMENT_NAME, null, false, "");
         boolean result = deployer.perform(mockBuild, null, buildListener);
         assert(!result);
