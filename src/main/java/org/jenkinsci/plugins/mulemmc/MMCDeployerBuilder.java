@@ -4,10 +4,6 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.maven.MavenBuild;
-import hudson.maven.MavenModuleSetBuild;
-import hudson.maven.reporters.MavenArtifact;
-import hudson.maven.reporters.MavenArtifactRecord;
 import hudson.model.BuildListener;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
@@ -19,17 +15,15 @@ import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
 
 import javax.servlet.ServletException;
 
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.UsernamePasswordCredentials;
-import org.apache.commons.httpclient.auth.AuthPolicy;
-import org.apache.commons.httpclient.auth.AuthScope;
-import org.apache.commons.httpclient.methods.GetMethod;
-import org.jsoup.helper.StringUtil;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpStatus;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.protocol.HttpCoreContext;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
@@ -48,7 +42,6 @@ public class MMCDeployerBuilder extends Builder
 	public final boolean deployWithPomDetails;
 	public final String startupTimeout;
 	public final boolean deleteOldDeployments;
-	private final HttpClientFactory httpFactory;
 
 	@DataBoundConstructor
 	public MMCDeployerBuilder(String mmcUrl, String user, String password, boolean completeDeployment, String clusterOrServerGroupName,
@@ -58,14 +51,13 @@ public class MMCDeployerBuilder extends Builder
 		this.password = password;
 		this.fileLocation = fileLocation;
 		this.artifactName = artifactName;
-		this.deploymentName = StringUtil.isBlank(deploymentName) ? artifactName : deploymentName;
+		this.deploymentName = deploymentName == null || deploymentName.trim().isEmpty() ? artifactName : deploymentName;
 		this.artifactVersion = artifactVersion;
 		this.clusterOrServerGroupName = clusterOrServerGroupName;
 		this.completeDeployment = completeDeployment;
 		this.deployWithPomDetails = true;
 		this.startupTimeout = startupTimeout;
 		this.deleteOldDeployments = deleteOldDeployments;
-        this.httpFactory = new HttpClientFactory(mmcUrl, user, password);
 	}
 
 	@Override
@@ -81,24 +73,25 @@ public class MMCDeployerBuilder extends Builder
         listener.getLogger().println(">>> Artifact Version IS  " + artifactVersion);
 		listener.getLogger().println(">>> DeploymentName IS " + deploymentName);
 		listener.getLogger().println(">>> clusterOrServerGroupName IS " + clusterOrServerGroupName);
-		listener.getLogger().println(">>> Beginning deployment....");
+		listener.getLogger().println(">>> Preparing deployment....");
 
 		try
 		{
 			envVars = build.getEnvironment(listener);
-			MuleRest muleRest = new MuleRest(new URL(mmcUrl), httpFactory.createHttpClient(), httpFactory.createHttpContext());
+            final URL url = new URL(mmcUrl);
 
-			if (build instanceof MavenModuleSetBuild)
+            HttpClientFactory httpFactory = new HttpClientFactory(mmcUrl, user, password);
+            final CloseableHttpClient httpClient = httpFactory.createHttpClient();
+            final HttpCoreContext httpContext = httpFactory.createHttpContext();
+            MuleRest muleRest = new MuleRest(url, httpClient, httpContext);
+
+			if (artifactVersion != null && artifactVersion.length()>0 && artifactName != null && artifactName.length()>0 )
 			{
-                success = deployMavenBuild((MavenModuleSetBuild) build, listener, envVars, muleRest);
+				success = deployFreestyleProject(build, listener, envVars, muleRest);
 			} else {
-                if (artifactVersion != null && artifactVersion.length()>0 && artifactName != null && artifactName.length()>0 )
-                {
-                    success = deployFreestyleProject(build, listener, envVars, muleRest);
-                } else {
-                    listener.getLogger().println("Plugin configuration for Artifact id/version required for Freestyle project. ");
-                }
-            }
+				listener.getLogger().println("Plugin configuration for Artifact id/version required for Freestyle project. ");
+			}
+
 		} catch (IOException e)
 		{
 			listener.getLogger().println(e.toString());
@@ -124,10 +117,10 @@ public class MMCDeployerBuilder extends Builder
         for (FilePath file : deploymentArtifacts)
         {
             listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " + hudson.Util.replaceMacro(artifactName, envVars));
-            listener.getLogger().println(">>>>>>>>>>>> VERSION: " +hudson.Util.replaceMacro(artifactVersion, envVars));
+            listener.getLogger().println(">>>>>>>>>>>> VERSION: " + hudson.Util.replaceMacro(artifactVersion, envVars));
             listener.getLogger().println(">>>>>>>>>>>> FILE: "+ file.getRemote());
-            listener.getLogger().println(">>>>>>>>>>>> SERVER: " +hudson.Util.replaceMacro(clusterOrServerGroupName, envVars));
-            listener.getLogger().println(">>>>>>>>>>>> DEPLOYMENT: " +hudson.Util.replaceMacro(deploymentName, envVars));
+            listener.getLogger().println(">>>>>>>>>>>> TARGET: " + hudson.Util.replaceMacro(clusterOrServerGroupName, envVars));
+            listener.getLogger().println(">>>>>>>>>>>> DEPLOYMENT: " + hudson.Util.replaceMacro(deploymentName, envVars));
             try {
                 doDeploy(listener,
                         muleRest,
@@ -138,7 +131,7 @@ public class MMCDeployerBuilder extends Builder
                         hudson.Util.replaceMacro(deploymentName, envVars));
             } catch (Exception e) {
                 success = false;
-                listener.getLogger().println("Deployment failed, undeploying...");
+                listener.getLogger().println("Deployment failed, undeploying... reason: " + e);
                 doUndeploy(listener,
                         muleRest,
                         hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
@@ -150,91 +143,43 @@ public class MMCDeployerBuilder extends Builder
         return success;
     }
 
-    private boolean deployMavenBuild(MavenModuleSetBuild build, BuildListener listener, EnvVars envVars, MuleRest muleRest) throws Exception {
-        listener.getLogger().println("doing maven deploy based on maven artifact details in POM");
-        boolean success = true;
-        for (final List<MavenBuild> mavenBuilds : build.getModuleBuilds().values())
-        {
-            for (final MavenBuild mavenBuild : mavenBuilds)
-            {
-
-                MavenArtifactRecord record = mavenBuild.getMavenArtifacts();
-
-                MavenArtifact mainArtifact = record.mainArtifact;
-
-                if (record.isPOM())
-                {
-                    List<MavenArtifact> attachedArtifacts = record.attachedArtifacts;
-                    for (final MavenArtifact nextAttached : attachedArtifacts)
-                    {
-                        listener.getLogger().println(">>>>>>>>>>>> ARTIFACT ID: " + nextAttached.artifactId);
-                        listener.getLogger().println(">>>>>>>>>>>> VERSION: " + nextAttached.version);
-                        listener.getLogger().println(">>>>>>>>>>>> FILE: " + nextAttached.getFile(mavenBuild).getAbsolutePath());
-                        try {
-							doDeploy(listener,
-									muleRest,
-									nextAttached.getFile(mavenBuild),
-									hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
-									nextAttached.version,
-									nextAttached.artifactId,
-									deploymentName);
-						} catch (Exception e) {
-                        	success = false;
-							listener.getLogger().println("Deployment failed, undeploying...");
-							doUndeploy(listener,
-									muleRest,
-									hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
-									nextAttached.version,
-									nextAttached.artifactId,
-									deploymentName);
-						}
-                    }
-                }
-            }
-        }
-        return success;
-    }
-
     protected void doDeploy(BuildListener listener, MuleRest muleRest, File aFile, String target, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
 	{
 		listener.getLogger().println("Deployment (" + theApplicationName + " " + theVersion + " to " + target + ")...");
-		try {
-            String versionId = muleRest.restfullyUploadRepository(theApplicationName, theVersion, aFile);
+		String versionId = muleRest.restfullyUploadRepository(theApplicationName, theVersion, aFile);
 
-            // delete existing deployment with same name before creating new one
-            muleRest.restfullyDeleteDeployment(theDeploymentName);
-            // undeploy other versions of that application on that target
-            muleRest.undeploy(theApplicationName, target);
+		// delete existing deployment with same name before creating new one
+		muleRest.restfullyDeleteDeployment(theDeploymentName);
+		// undeploy other versions of that application on that target
+		muleRest.undeploy(theApplicationName, target);
 
-            if (deleteOldDeployments) {
-                listener.getLogger().println("... delete deployments");
-                muleRest.deleteDeployments(theApplicationName, target);
-                listener.getLogger().println("... delete deployments finished");
-            }
+		if (deleteOldDeployments) {
+			listener.getLogger().println("... delete deployments");
+			muleRest.deleteDeployments(theApplicationName, target);
+			listener.getLogger().println("... delete deployments finished");
+		}
 
-            listener.getLogger().println("... create deployment");
-            String deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, target, versionId);
-            listener.getLogger().println("... create deployment finished");
+		listener.getLogger().println("... create deployment");
+		String deploymentId = muleRest.restfullyCreateDeployment(theDeploymentName, target, versionId);
+		listener.getLogger().println("... create deployment finished");
 
-            if (completeDeployment) {
-                listener.getLogger().println("... start deployment");
-                final long startTime = System.nanoTime();
-                final long timeout = Long.valueOf(this.startupTimeout);
-                muleRest.restfullyDeployDeploymentById(deploymentId);
-                String status;
-                do {
-                    if (timeout > 0 && (System.nanoTime() - startTime) > timeout * 1000)
-                        throw new Exception("Timeout during startup");
-                    status = muleRest.restfullyWaitStartupForCompletion(deploymentId);
-                    listener.getLogger().println("....retreiving status: " + status);
-                    Thread.sleep(50);
-                    if (status.equals("FAILED"))
-                        throw new Exception("Startup failed.");
-                } while (status.equals("IN PROGRESS"));
-            }
-        } finally {
-            listener.getLogger().println("Deployment finished");
-        }
+		if (completeDeployment) {
+			listener.getLogger().println("... start deployment");
+			final long startTime = System.nanoTime();
+			final long timeout = Long.valueOf(this.startupTimeout);
+			muleRest.restfullyDeployDeploymentById(deploymentId);
+			String status;
+			do {
+				if (timeout > 0 && (System.nanoTime() - startTime) > timeout * 1000)
+					throw new Exception("Timeout during startup");
+				status = muleRest.restfullyWaitStartupForCompletion(deploymentId);
+				listener.getLogger().println("....retreiving status: " + status);
+				Thread.sleep(50);
+				if (status.equals("FAILED"))
+					throw new Exception("Startup failed.");
+			} while (status.equals("IN PROGRESS"));
+		}
+		listener.getLogger().println("Deployment finished");
 	}
 
 	protected void doUndeploy(BuildListener listener, MuleRest muleRest, String clusterOrServerGroupName, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
@@ -270,25 +215,21 @@ public class MMCDeployerBuilder extends Builder
 		public FormValidation doTestConnection(@QueryParameter("mmcUrl") final String mmcUrl, @QueryParameter("user") final String user,
 		        @QueryParameter("password") final String password) throws IOException, ServletException
 		{
-
 			try
 			{
-				URL url = new URL(mmcUrl);
-				HttpClient client = new HttpClient();
-
-				client.getState().setCredentials(new AuthScope(url.getHost(), url.getPort()),
-				        new UsernamePasswordCredentials(user, password));
-
-				List authPrefs = new ArrayList(3);
-				authPrefs.add(AuthPolicy.BASIC);
-				client.getParams().setParameter(AuthPolicy.AUTH_SCHEME_PRIORITY, authPrefs);
-				client.getParams().setAuthenticationPreemptive(true);
-
-				GetMethod method = new GetMethod(mmcUrl + "/deployments");
-				int statusCode = client.executeMethod(method);
-
-				if (statusCode == 200) return FormValidation.ok("Success");
-				else return FormValidation.error("Client error : " + method.getStatusText());
+                HttpClientFactory httpFactory = new HttpClientFactory(mmcUrl, user, password);
+                final CloseableHttpClient httpClient = httpFactory.createHttpClient();
+                final HttpCoreContext httpContext = httpFactory.createHttpContext();
+                URL url = new URL(mmcUrl);
+                HttpGet get = new HttpGet(url.getPath() + "/deployments");
+                HttpHost mmcHost = new HttpHost(url.getHost(), url.getPort(), url.getProtocol());
+                final CloseableHttpResponse response = httpClient.execute(mmcHost, get, httpContext);
+                if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK)
+					return FormValidation.error("Client error: " + response.getStatusLine().getReasonPhrase());
+                else if (!response.getEntity().getContentType().getValue().equalsIgnoreCase("application/json"))
+					return FormValidation.error("access denied");
+				else
+					return FormValidation.ok("Success");
 			} catch (Exception e)
 			{
 				return FormValidation.error("Client error : " + e.getMessage());

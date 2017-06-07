@@ -1,13 +1,10 @@
 package org.jenkinsci.plugins.mulemmc;
 
 import java.io.File;
-import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-
-import hudson.maven.reporters.MavenArtifact;
 
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.auth.AuthPolicy;
@@ -19,11 +16,9 @@ import org.apache.commons.httpclient.methods.multipart.Part;
 import org.apache.commons.httpclient.methods.multipart.StringPart;
 import org.apache.commons.httpclient.UsernamePasswordCredentials;
 
-import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
-import org.junit.Test;
 
 public class MmcTest {
 

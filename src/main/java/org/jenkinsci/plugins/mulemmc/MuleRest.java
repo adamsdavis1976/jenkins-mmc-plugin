@@ -5,11 +5,7 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-import org.apache.http.Consts;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpHost;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
+import org.apache.http.*;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
@@ -60,31 +56,31 @@ public class MuleRest
     private String mmcPath;
 
     public MuleRest(URL mmcUrl, CloseableHttpClient httpClient, HttpContext context) {
-		this.mmcHost = new HttpHost(mmcUrl.getHost(), mmcUrl.getPort());
+        logger.fine("MuleRest: URL: " + mmcUrl);
+		this.mmcHost = new HttpHost(mmcUrl.getHost(), mmcUrl.getPort(), mmcUrl.getProtocol());
 		this.mmcPath = mmcUrl.getPath();
         this.mmcHttpClient = httpClient;
 		this.context = context;
-		logger.finer("MMC URL: " + mmcUrl);
 	}
 	
 	private void processResponseCode(HttpResponse response) throws Exception
 	{
 	    int code = response.getStatusLine().getStatusCode();
-		logger.finer(">>>> processResponseCode " + code);
 
-        Exception e = null;
+		if (code == HttpStatus.SC_OK)
+		    return;
+
+        logger.warning(">>>> processResponseCode " + code);
+        String content = EntityUtils.toString(response.getEntity());
 
         if (code == Status.NOT_FOUND.getStatusCode())
-		    e = new Exception("The resource was not found.");
+		    throw new Exception("The resource was not found. " + content);
 		else if (code == Status.CONFLICT.getStatusCode())
-	        e = new Exception("The operation was unsuccessful because a resource with that name already exists.");
+	        throw new Exception("The operation was unsuccessful because a resource with that name already exists. " + content);
 		else if (code == Status.INTERNAL_SERVER_ERROR.getStatusCode())
-		    e = new Exception("The operation was unsuccessful.");
+		    throw new Exception("The operation was unsuccessful. " + content);
 		else if (code != Status.OK.getStatusCode())
-		    e = new Exception("Unexpected Status Code Return, Status Line: " + code);
-
-        if (e != null)
-            throw e;
+            throw new Exception("Unexpected Status Code Return, Status Line: " + response.getStatusLine() + " " + content);
 	}
 
     /**
@@ -446,22 +442,24 @@ public class MuleRest
         try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 
+            String versionId = null;
             InputStream responseStream = response.getEntity().getContent();
             JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
             JsonNode applicationsNode = jsonNode.path("data");
+            applications:
             for (JsonNode applicationNode : applicationsNode) {
                 if (name.equals(applicationNode.path("name").asText())) {
                     JsonNode versionsNode = applicationNode.path("versions");
                     for (JsonNode versionNode : versionsNode) {
                         if (version.equals(versionNode.path("name").asText())) {
-                            String versionId = versionNode.get("id").asText();
-                            logger.fine(">>>> restfullyGetVersionId => " + versionId);
-                            return versionId;
+                            versionId = versionNode.get("id").asText();
+                            break applications;
                         }
                     }
                 }
             }
-            return null;
+            logger.fine(">>>> restfullyGetVersionId => " + versionId);
+            return versionId;
         }
 	}
 
