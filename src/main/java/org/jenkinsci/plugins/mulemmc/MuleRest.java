@@ -129,8 +129,7 @@ public class MuleRest
 		post.setEntity(sre);
 
         CloseableHttpClient httpClient = getHttpClient();
-        CloseableHttpResponse response = httpClient.execute(mmcHost, post, context);
-		try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, post, context)) {
             processResponseCode(response);
 
             InputStream responseStream = response.getEntity().getContent();
@@ -138,8 +137,6 @@ public class MuleRest
             String id = jsonNode.path("id").asText();
             logger.fine(">>>> restfullyCreateDeployment created id " + id);
             return id;
-        } finally {
-            response.close();
         }
 	}
 
@@ -252,8 +249,7 @@ public class MuleRest
 	protected boolean isDeployed(String deploymentId) throws Exception {
         CloseableHttpClient httpClient = getHttpClient();
 		HttpGet get = new HttpGet(mmcPath + "/deployments/" + deploymentId);
-        CloseableHttpResponse response = httpClient.execute(mmcHost, get, context);
-        try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 
             HttpEntity entity = response.getEntity();
@@ -266,8 +262,6 @@ public class MuleRest
             JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
             String status = jsonNode.path("data[0].status").asText();
             return STATUS_DEPLOYED.equals(status);
-        } finally {
-            response.close();
         }
 	}
 
@@ -284,8 +278,7 @@ public class MuleRest
 
         CloseableHttpClient httpClient = getHttpClient();
         HttpGet get = new HttpGet(mmcPath + "/clusters");
-        CloseableHttpResponse response = httpClient.execute(mmcHost, get, context);
-        try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 
             String string = EntityUtils.toString(response.getEntity());
@@ -302,8 +295,6 @@ public class MuleRest
             }
             logger.fine(">>>> restfullyGetClustersOfGroupId => " + clusterIds);
             return clusterIds;
-        } finally {
-            response.close();
         }
     }
 
@@ -312,8 +303,7 @@ public class MuleRest
 
         CloseableHttpClient httpClient = getHttpClient();
         HttpGet get = new HttpGet(mmcPath + "/deployments?" + serverType.queryString + "=" + targetId);
-        CloseableHttpResponse response = httpClient.execute(mmcHost, get, context);
-        try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 
             HttpEntity entity = response.getEntity();
@@ -344,8 +334,6 @@ public class MuleRest
             logger.fine(">>>> restfullyGetDeployedDeployments returns " + deploymentIds);
 
             return deploymentIds;
-        } finally {
-            response.close();
         }
     }
 
@@ -361,8 +349,7 @@ public class MuleRest
 
         CloseableHttpClient httpClient = getHttpClient();
         HttpGet get = new HttpGet(mmcPath + "/repository/" + applicationId);
-        CloseableHttpResponse response = httpClient.execute(mmcHost, get, context);
-        try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 
             InputStream responseStream = response.getEntity().getContent();
@@ -373,8 +360,6 @@ public class MuleRest
             }
             logger.fine(">>>> restfullyGetVersionIds => " + versions);
             return versions;
-        } finally {
-            response.close();
         }
     }
 
@@ -396,11 +381,8 @@ public class MuleRest
 
 		CloseableHttpClient httpClient = getHttpClient();
 		HttpDelete delete = new HttpDelete(mmcPath + "/deployments/" + deploymentId);
-		CloseableHttpResponse response = httpClient.execute(mmcHost, delete, context);
-		try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, delete, context)) {
             processResponseCode(response);
-        } finally {
-		    response.close();
         }
 	}
 
@@ -411,11 +393,8 @@ public class MuleRest
 
         CloseableHttpClient httpClient = getHttpClient();
 		HttpPost post = new HttpPost(mmcPath + "/deployments/" + deploymentId+ "/deploy");
-		CloseableHttpResponse response = httpClient.execute(mmcHost, post, context);
-        try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, post, context)) {
             processResponseCode(response);
-        } finally {
-            response.close();
         }
 	}
 
@@ -424,16 +403,13 @@ public class MuleRest
 
         CloseableHttpClient httpClient = getHttpClient();
 		HttpGet get = new HttpGet(mmcPath + "/deployments/" + deploymentId);
-        CloseableHttpResponse response = httpClient.execute(mmcHost, get, context);
-		try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
             InputStream responseStream = response.getEntity().getContent();
             JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
             String status = jsonNode.path("status").asText();
             logger.fine(">>>> restfullyCreateDeployment status " + status);
             return status;
-        } finally {
-		    response.close();
         }
 	}
 
@@ -443,8 +419,7 @@ public class MuleRest
 
 		CloseableHttpClient httpClient = getHttpClient();
 		HttpGet get = new HttpGet(mmcPath + "/deployments");
-		CloseableHttpResponse response = httpClient.execute(mmcHost, get, context);
-		try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 
             String deploymentId = null;
@@ -459,8 +434,6 @@ public class MuleRest
             }
             logger.fine(">>>> restfullyGetDeploymentId => " + deploymentId);
             return deploymentId;
-        } finally {
-            response.close();
         }
 	}
 
@@ -470,8 +443,7 @@ public class MuleRest
 
 		CloseableHttpClient httpClient = getHttpClient();
 		HttpGet get = new HttpGet(mmcPath + "/repository");
-		CloseableHttpResponse response = httpClient.execute(mmcHost, get, context);
-		try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 
             InputStream responseStream = response.getEntity().getContent();
@@ -490,8 +462,6 @@ public class MuleRest
                 }
             }
             return null;
-        } finally {
-		    response.close();
         }
 	}
 
@@ -501,8 +471,7 @@ public class MuleRest
 
         CloseableHttpClient httpClient = getHttpClient();
         HttpGet get = new HttpGet(mmcPath + "/repository");
-        CloseableHttpResponse response = httpClient.execute(mmcHost, get, context);
-        try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 
             String applicationId = null;
@@ -517,8 +486,6 @@ public class MuleRest
             }
             logger.fine(">>>> restfullyGetApplicationId => " + applicationId);
             return applicationId;
-        } finally {
-            response.close();
         }
     }
 
@@ -527,8 +494,7 @@ public class MuleRest
 
         CloseableHttpClient httpClient = getHttpClient();
         HttpGet get = new HttpGet(mmcPath + "/servers?name=" + name);
-        CloseableHttpResponse response = httpClient.execute(mmcHost, get, context);
-        try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 
             String serverId = null;
@@ -543,8 +509,6 @@ public class MuleRest
             }
             logger.fine(">>>> restfullyGetServerId => " + serverId);
             return serverId;
-        } finally {
-            response.close();
         }
     }
 
@@ -558,8 +522,7 @@ public class MuleRest
 
         CloseableHttpClient httpClient = getHttpClient();
         HttpGet get = new HttpGet(mmcPath + "/serverGroups");
-        CloseableHttpResponse response = httpClient.execute(mmcHost, get, context);
-        try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 
             String serverGroupId = null;
@@ -574,8 +537,6 @@ public class MuleRest
             }
             logger.fine(">>>> restfullyGetServerGroupId => " + serverGroupId);
             return serverGroupId;
-        } finally {
-            response.close();
         }
     }
 
@@ -602,8 +563,7 @@ public class MuleRest
                 .build();
 		post.setEntity(multipartEntity);
 
-		CloseableHttpResponse response = httpClient.execute(mmcHost, post, context);
-        try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, post, context)) {
             //in the case of a conflict status code, use the pre-existing application
             if (response.getStatusLine().getStatusCode() != Status.CONFLICT.getStatusCode()) {
                 processResponseCode(response);
@@ -618,8 +578,6 @@ public class MuleRest
             String versionId = result.path("versionId").asText();
             logger.fine(">>>> restfullyUploadRepository => " + versionId);
             return versionId;
-        } finally {
-            response.close();
         }
 	}
 
@@ -629,11 +587,8 @@ public class MuleRest
 
 		CloseableHttpClient httpClient = getHttpClient();
 		HttpDelete delete = new HttpDelete(mmcPath + "/repository/" + applicationVersionId);
-		CloseableHttpResponse response = httpClient.execute(mmcHost, delete, context);
-		try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, delete, context)) {
             processResponseCode(response);
-        } finally {
-		    response.close();
         }
 	}
 
@@ -666,8 +621,7 @@ public class MuleRest
 
 		CloseableHttpClient httpClient = getHttpClient();
 		HttpGet get = new HttpGet(mmcPath + "/clusters");
-		CloseableHttpResponse response = httpClient.execute(mmcHost, get, context);
-        try {
+        try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 
             String string = EntityUtils.toString(response.getEntity());
@@ -680,8 +634,6 @@ public class MuleRest
             }
 
             logger.fine(">>>> restfullyGetClusterId - no matching cluster retreived from MMC");
-        } finally {
-            response.close();
         }
         return null;
 	}
