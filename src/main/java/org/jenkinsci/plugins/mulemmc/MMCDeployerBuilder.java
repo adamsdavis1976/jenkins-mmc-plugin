@@ -29,8 +29,11 @@ import org.kohsuke.stapler.QueryParameter;
 
 public class MMCDeployerBuilder extends Builder
 {
+    private static final String SNAPSHOT = "SNAPSHOT";
+    public static final String STATUS_IN_PROGRESS = "IN PROGRESS";
+    public static final String STATUS_FAILED = "FAILED";
 
-	public final String mmcUrl;
+    public final String mmcUrl;
 	public final String user;
 	public final String password;
 	public final String fileLocation;
@@ -146,10 +149,18 @@ public class MMCDeployerBuilder extends Builder
     protected void doDeploy(BuildListener listener, MuleRest muleRest, File aFile, String target, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
 	{
 		listener.getLogger().println("Deployment (" + theApplicationName + " " + theVersion + " to " + target + ")...");
+
+		// delete application first
+		if (isSnapshotVersion(theVersion))
+		{
+			listener.getLogger().println("Is Snapshot. Delete " + theApplicationName + " " + theVersion);
+			muleRest.deleteApplication(theApplicationName, theVersion);
+		}
+
 		String versionId = muleRest.restfullyUploadRepository(theApplicationName, theVersion, aFile);
 
 		// delete existing deployment with same name before creating new one
-		muleRest.restfullyDeleteDeployment(theDeploymentName);
+		muleRest.deleteDeployment(theDeploymentName);
 		// undeploy other versions of that application on that target
 		muleRest.undeploy(theApplicationName, target);
 
@@ -170,22 +181,28 @@ public class MMCDeployerBuilder extends Builder
 			muleRest.restfullyDeployDeploymentById(deploymentId);
 			String status;
 			do {
+                Thread.sleep(50);
 				if (timeout > 0 && (System.nanoTime() - startTime) > timeout * 1000)
 					throw new Exception("Timeout during startup");
-				status = muleRest.restfullyWaitStartupForCompletion(deploymentId);
+				status = muleRest.restfullyGetDeploymentStatus(deploymentId);
 				listener.getLogger().println("....retreiving status: " + status);
-				Thread.sleep(50);
-				if (status.equals("FAILED"))
+				if (status.equals(STATUS_FAILED))
 					throw new Exception("Startup failed.");
-			} while (status.equals("IN PROGRESS"));
+			} while (status.equals(STATUS_IN_PROGRESS));
 		}
 		listener.getLogger().println("Deployment finished");
 	}
 
+	private boolean isSnapshotVersion(String version)
+	{
+		return version.contains(SNAPSHOT);
+	}
+
+
 	protected void doUndeploy(BuildListener listener, MuleRest muleRest, String clusterOrServerGroupName, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
 	{
 		listener.getLogger().println("Undeployment starting (" + theApplicationName + " " + theVersion + " to " + clusterOrServerGroupName + ")...");
-		muleRest.restfullyDeleteDeployment(theDeploymentName);
+		muleRest.deleteDeployment(theDeploymentName);
 		listener.getLogger().println("Undeployment finished");
 	}
 

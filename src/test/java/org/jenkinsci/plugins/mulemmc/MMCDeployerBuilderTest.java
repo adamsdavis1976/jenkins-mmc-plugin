@@ -5,16 +5,11 @@ import static org.mockito.Mockito.*;
 import hudson.EnvVars;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
-import hudson.model.Environment;
-import hudson.model.EnvironmentList;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
-import org.hamcrest.*;
 
 import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Created by christianlangmann on 22/03/2017.
@@ -45,7 +40,7 @@ public class MMCDeployerBuilderTest {
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
         when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
-        when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "DEPLOYED");
+        when(mockRest.restfullyGetDeploymentStatus(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "DEPLOYED");
         MMCDeployerBuilder deployer = new MMCDeployerBuilder(MMC_URL, null, null, true, TARGET_NAME,
                 "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false, "-1");
         deployer.doDeploy(buildListener, mockRest, null, TARGET_NAME, VERSION, APP_NAME, DEPLOYMENT_NAME);
@@ -56,7 +51,7 @@ public class MMCDeployerBuilderTest {
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
         when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
-        when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "DEPLOYED");
+        when(mockRest.restfullyGetDeploymentStatus(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "DEPLOYED");
         MMCDeployerBuilder deployer = new MMCDeployerBuilder(MMC_URL, null, null, true, TARGET_NAME,
                 "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false,  "1");
         deployer.doDeploy(buildListener, mockRest, null, TARGET_NAME, VERSION, APP_NAME, DEPLOYMENT_NAME);
@@ -67,7 +62,7 @@ public class MMCDeployerBuilderTest {
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
         when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
-        when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "FAILED");
+        when(mockRest.restfullyGetDeploymentStatus(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "FAILED");
         MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
                 "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false, "-1");
         deployer.doDeploy(buildListener, mockRest, null, TARGET_NAME, VERSION, APP_NAME, DEPLOYMENT_NAME);
@@ -78,7 +73,7 @@ public class MMCDeployerBuilderTest {
         MuleRest mockRest = Mockito.mock(MuleRest.class);
         when(mockRest.restfullyUploadRepository(APP_NAME, VERSION, null)).thenReturn(VERSIONID);
         when(mockRest.restfullyCreateDeployment(DEPLOYMENT_NAME, TARGET_NAME, VERSIONID)).thenReturn(DEPLOYMENTID);
-        when(mockRest.restfullyWaitStartupForCompletion(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "FAILED");
+        when(mockRest.restfullyGetDeploymentStatus(DEPLOYMENTID)).thenReturn("IN PROGRESS", "IN PROGRESS", "IN PROGRESS", "FAILED");
         MMCDeployerBuilder deployer = new MMCDeployerBuilder(null, null, null, true, TARGET_NAME,
                 "test.zip", APP_NAME, DEPLOYMENT_NAME, VERSION, false, "");
         deployer.doDeploy(buildListener, mockRest, null, TARGET_NAME, VERSION, APP_NAME, DEPLOYMENT_NAME);
