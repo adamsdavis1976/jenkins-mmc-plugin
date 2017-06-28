@@ -188,16 +188,6 @@ public class MuleRest
         logger.info("<<<< undeploy finished");
     }
 
-    public void deleteDeployments(String applicationName, String targetName) throws Exception {
-        logger.info(">>>> deleteDeployments " + applicationName + " on " + targetName);
-
-        Set<String> deploymentIds = getAllDeployments(applicationName, targetName);
-        for (String deploymentId : deploymentIds) {
-            restfullyDeleteDeploymentById(deploymentId);
-        }
-        logger.info("<<<< deleteDeployments finished");
-    }
-
     private void restfullyUndeployById(String deploymentId) throws Exception {
         logger.fine(">>>> restfullyUndeployById " + deploymentId);
 
@@ -213,7 +203,7 @@ public class MuleRest
         return getDeployments(applicationName, targetName, true);
     }
 
-    private Set<String> getAllDeployments(String applicationName, String targetName) throws Exception {
+    public Set<String> getAllDeployments(String applicationName, String targetName) throws Exception {
 
         return getDeployments(applicationName, targetName, false);
     }
@@ -355,7 +345,7 @@ public class MuleRest
         logger.info("<<<< deleteDeployment finished");
 	}
 
-	private void restfullyDeleteDeploymentById(String deploymentId) throws Exception
+	public void restfullyDeleteDeploymentById(String deploymentId) throws Exception
 	{
 		logger.info(">>>> restfullyDeleteDeploymentById " + deploymentId);
 
@@ -385,10 +375,13 @@ public class MuleRest
         CloseableHttpClient httpClient = getHttpClient();
 		HttpGet get = new HttpGet(mmcPath + "/deployments/" + deploymentId);
         try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
-            processResponseCode(response);
-            InputStream responseStream = response.getEntity().getContent();
-            JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
-            String status = jsonNode.path(STATUS_FIELD_NAME).asText();
+            String status = "DELETED";
+            if (response.getStatusLine().getStatusCode() != Status.NOT_FOUND.getStatusCode()) {
+                processResponseCode(response);
+                InputStream responseStream = response.getEntity().getContent();
+                JsonNode jsonNode = OBJECT_MAPPER.readTree(responseStream);
+                status = jsonNode.path(STATUS_FIELD_NAME).asText();
+            }
             logger.fine("<<<< restfullyGetDeploymentStatus => " + status);
             return status;
         }
@@ -504,7 +497,7 @@ public class MuleRest
         logger.fine(">>>> restfullyGetServerGroupId " + name);
 
         CloseableHttpClient httpClient = getHttpClient();
-        HttpGet get = new HttpGet(mmcPath + "/serverGroups");
+        HttpGet get = new HttpGet(mmcPath + "/serverGroups?name=" + name);
         try (CloseableHttpResponse response = httpClient.execute(mmcHost, get, context)) {
             processResponseCode(response);
 

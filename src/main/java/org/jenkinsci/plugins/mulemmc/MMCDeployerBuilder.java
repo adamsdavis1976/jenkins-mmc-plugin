@@ -4,20 +4,12 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.BuildListener;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
+import hudson.model.BuildListener;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.Builder;
 import hudson.util.FormValidation;
-
-import java.io.File;
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
-
-import javax.servlet.ServletException;
-
 import org.apache.http.HttpHost;
 import org.apache.http.HttpStatus;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -27,11 +19,39 @@ import org.apache.http.protocol.HttpCoreContext;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
+import javax.servlet.ServletException;
+import java.io.File;
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+
 public class MMCDeployerBuilder extends Builder
 {
+	class StartupFailedException extends Exception {
+        public StartupFailedException() {
+        }
+    }
+
+    class DeletingFailedException extends Exception {
+        public DeletingFailedException(final String deploymentId) {
+            this.deploymentId = deploymentId;
+        }
+        public String toString() {
+            return "deleting deployment " + deploymentId + " failed";
+        }
+        private String deploymentId;
+    }
+
     private static final String SNAPSHOT = "SNAPSHOT";
+
     public static final String STATUS_IN_PROGRESS = "IN PROGRESS";
+    public static final String STATUS_DELETING = "DELETING";
+    public static final String STATUS_DELETED = "DELETED";
     public static final String STATUS_FAILED = "FAILED";
+    public static final String STATUS_DEPLOYED = "DEPLOYED";
+    public static final String STATUS_UNDEPLOYED = "UNDEPLOYED";
 
     public final String mmcUrl;
 	public final String user;
@@ -67,7 +87,6 @@ public class MMCDeployerBuilder extends Builder
 	public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener)
 	{
 		boolean success = false;
-		EnvVars envVars = new EnvVars();
 
 		listener.getLogger().println(">>> MMC URL IS " + mmcUrl);
 		listener.getLogger().println(">>> USER IS " + user);
@@ -80,7 +99,7 @@ public class MMCDeployerBuilder extends Builder
 
 		try
 		{
-			envVars = build.getEnvironment(listener);
+            final EnvVars envVars = build.getEnvironment(listener);
             final URL url = new URL(mmcUrl);
 
             HttpClientFactory httpFactory = new HttpClientFactory(mmcUrl, user, password);
@@ -132,14 +151,11 @@ public class MMCDeployerBuilder extends Builder
                         hudson.Util.replaceMacro(artifactVersion, envVars),
                         hudson.Util.replaceMacro(artifactName, envVars),
                         hudson.Util.replaceMacro(deploymentName, envVars));
-            } catch (Exception e) {
+            } catch (StartupFailedException e) {
                 success = false;
-                listener.getLogger().println("Deployment failed, undeploying... reason: " + e);
+                listener.getLogger().println("Startup failed, undeploying...");
                 doUndeploy(listener,
                         muleRest,
-                        hudson.Util.replaceMacro(clusterOrServerGroupName, envVars),
-                        hudson.Util.replaceMacro(artifactVersion, envVars),
-                        hudson.Util.replaceMacro(artifactName, envVars),
                         hudson.Util.replaceMacro(deploymentName, envVars));
             }
         }
@@ -166,7 +182,7 @@ public class MMCDeployerBuilder extends Builder
 
 		if (deleteOldDeployments) {
 			listener.getLogger().println("... delete deployments");
-			muleRest.deleteDeployments(theApplicationName, target);
+			deleteDeployments(listener, muleRest, theApplicationName, target);
 			listener.getLogger().println("... delete deployments finished");
 		}
 
@@ -179,31 +195,54 @@ public class MMCDeployerBuilder extends Builder
 			final long startTime = System.nanoTime();
 			final long timeout = Long.valueOf(this.startupTimeout);
 			muleRest.restfullyDeployDeploymentById(deploymentId);
-			String status;
-			do {
-                Thread.sleep(50);
-				if (timeout > 0 && (System.nanoTime() - startTime) > timeout * 1000)
-					throw new Exception("Timeout during startup");
-				status = muleRest.restfullyGetDeploymentStatus(deploymentId);
-				listener.getLogger().println("....retreiving status: " + status);
-				if (status.equals(STATUS_FAILED))
-					throw new Exception("Startup failed.");
-			} while (status.equals(STATUS_IN_PROGRESS));
+            final String status = waitForStatus(listener, muleRest, deploymentId, startTime, timeout);
+            if (STATUS_FAILED.equals(status))
+                throw new StartupFailedException();
 		}
 		listener.getLogger().println("Deployment finished");
 	}
 
-	private boolean isSnapshotVersion(String version)
+    protected String waitForStatus(BuildListener listener, MuleRest muleRest, String deploymentId, long startTime, long timeout) throws Exception {
+        String status = muleRest.restfullyGetDeploymentStatus(deploymentId);;
+        listener.getLogger().println("....retreiving status: " + status);
+        while (!isFinalStatus(status)) {
+            Thread.sleep(50);
+            if (timeout > 0 && startTime > 0 && (System.nanoTime() - startTime) > (timeout * 1000))
+                throw new TimeoutException("Timeout during startup");
+            status = muleRest.restfullyGetDeploymentStatus(deploymentId);
+            listener.getLogger().println("....retreiving status: " + status);
+        }
+        return status;
+	}
+
+    protected static boolean isFinalStatus(String status) {
+	    return !(status.equals(STATUS_IN_PROGRESS) || status.equals(STATUS_DELETING));
+    }
+
+    private boolean isSnapshotVersion(String version)
 	{
 		return version.contains(SNAPSHOT);
 	}
 
+	protected void deleteDeployments(BuildListener listener, MuleRest muleRest, String applicationName, String targetName) throws Exception {
+        listener.getLogger().println("... delete deployment " + applicationName + " on " + targetName);
+		Set<String> deploymentIds = muleRest.getAllDeployments(applicationName, targetName);
+		for (String deploymentId : deploymentIds) {
+            listener.getLogger().println("... ... delete deployment " + deploymentId);
+            muleRest.restfullyDeleteDeploymentById(deploymentId);
+            final String status = waitForStatus(listener, muleRest, deploymentId, 0, 0);
+            if (STATUS_FAILED.equals(status)) {
+                throw new DeletingFailedException(deploymentId);
+            }
+		}
+        listener.getLogger().println("deleteDeployments finished");
+	}
 
-	protected void doUndeploy(BuildListener listener, MuleRest muleRest, String clusterOrServerGroupName, String theVersion, String theApplicationName, String theDeploymentName) throws Exception
+	protected void doUndeploy(BuildListener listener, MuleRest muleRest, String theDeploymentName) throws Exception
 	{
-		listener.getLogger().println("Undeployment starting (" + theApplicationName + " " + theVersion + " to " + clusterOrServerGroupName + ")...");
+		listener.getLogger().println("Delete deployment (" + theDeploymentName + ")...");
 		muleRest.deleteDeployment(theDeploymentName);
-		listener.getLogger().println("Undeployment finished");
+		listener.getLogger().println("Deployment deleted");
 	}
 
 	// Overridden for better type safety.
