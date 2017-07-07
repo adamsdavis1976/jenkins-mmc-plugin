@@ -1,12 +1,13 @@
+<?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
 <!--
 	public MMCDeployerBuilder(String mmcUrl
 									, String user
 									, String password
-									, boolean clusterDeploy
 									, String clusterOrServerGroupName
 									, String fileLocation
 									, String artifactName
+									, String deploymentName
 									, String artifactVersion )
 -->
   <f:section title="Deploy to Mule Management Console">
@@ -27,26 +28,32 @@
   	<f:entry title="Artifact Version" field="artifactVersion" description="required for freestyle projects only, ignored for maven projects">
        <f:textbox default=""/>
     </f:entry>
-   		
+
    	<f:entry title="Artifact Name" field="artifactName" description="required for freestyle projects only, ignored for maven projects">
  		 <f:textbox default=""/>
     </f:entry>
-   		
+
     <f:entry title="File Location" field="fileLocation" description="required for freestyle projects only, ignored for maven projects">
  		<f:textbox default=""/>
     </f:entry>
 
-	<f:entry title="Cluster or ServerGroup name" field="clusterOrServerGroupName">
+	<f:entry title="Target name" field="clusterOrServerGroupName" description="name of server, group or cluster">
  		<f:textbox default=""/>
     </f:entry>
-   
-    <f:entry title="Is Cluster" field="clusterDeploy" description="Is cluster">
-        <f:checkbox />
+
+    <f:entry title="Deployment name" field="deploymentName" description="name of deployment if different from artifact name">
+        <f:textbox default="" />
+    </f:entry>
+
+    <f:entry title="Delete old deployments" field="deleteOldDeployments" description="check whether the deployments that are undeployed should be deleted">
+        <f:checkbox default="true" />
     </f:entry>
 
     <f:entry title="Deploy After Upload" field="completeDeployment" description="If True the plugin will attempt to activate the deployment after upload is complete">
         <f:checkbox />
     </f:entry>
-
+    <f:entry title="Timeout for startup" field="startupTimeout" description="Timeout that defines how long the deploymend step pull the application state until it gives up (in ms)">
+        <f:textbox default="-1" />
+    </f:entry>
   </f:section>
 </j:jelly>
