@@ -181,9 +181,7 @@ public class MMCDeployerBuilder extends Builder
 		muleRest.undeploy(theApplicationName, target);
 
 		if (deleteOldDeployments) {
-			listener.getLogger().println("... delete deployments");
 			deleteDeployments(listener, muleRest, theApplicationName, target);
-			listener.getLogger().println("... delete deployments finished");
 		}
 
 		listener.getLogger().println("... create deployment");
@@ -231,11 +229,11 @@ public class MMCDeployerBuilder extends Builder
             listener.getLogger().println("... ... delete deployment " + deploymentId);
             muleRest.restfullyDeleteDeploymentById(deploymentId);
             final String status = waitForStatus(listener, muleRest, deploymentId, 0, 0);
-            if (STATUS_FAILED.equals(status)) {
+            if (!STATUS_DELETED.equals(status)) {
                 throw new DeletingFailedException(deploymentId);
             }
 		}
-        listener.getLogger().println("deleteDeployments finished");
+        listener.getLogger().println("... deleteDeployment " + applicationName + " on " + targetName + " finished");
 	}
 
 	protected void doUndeploy(BuildListener listener, MuleRest muleRest, String theDeploymentName) throws Exception
